@@ -1,5 +1,5 @@
 import { and, eq, gt, lt, ne, sql } from "drizzle-orm";
-import { db, type Executor } from "@/db";
+import { db, writeTx, type Executor } from "@/db";
 import {
   appointment,
   barber,
@@ -17,20 +17,11 @@ import { dayRange, toDateStr } from "./time";
 
 export class BookingError extends Error {}
 
-// Comprobar disponibilidad y escribir van en una transacción de escritura
-// (BEGIN IMMEDIATE): la BD bloquea a cualquier otro escritor, también de otras
-// instancias del servidor, así que no se cuela otra reserva en medio.
-// Dentro de un mismo proceso, además, se encolan: con `file:` el cliente es
-// síncrono y esperar el bloqueo congelaría el proceso que lo tiene.
-let queue: Promise<unknown> = Promise.resolve();
+// Comprobar disponibilidad y escribir van en la misma transacción de escritura,
+// así que no se cuela otra reserva en medio (ni desde otra instancia).
 async function exclusive<T>(fn: (tx: Executor) => Promise<T>): Promise<T> {
-  const run = queue.then(
-    () => db.transaction(fn),
-    () => db.transaction(fn),
-  );
-  queue = run.catch(() => {});
   try {
-    return await run;
+    return await writeTx(fn);
   } catch (err) {
     if (isBusy(err))
       throw new BookingError(

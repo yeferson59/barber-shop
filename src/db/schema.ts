@@ -118,6 +118,9 @@ export const barber = sqliteTable("barber", {
   bio: text("bio"),
   photoUrl: text("photo_url"),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
+  /** SHA-256 del enlace de invitación pendiente (el token no se guarda). */
+  inviteHash: text("invite_hash").unique(),
+  inviteExpiresAt: timestamp("invite_expires_at"),
   createdAt: createdAt(),
 });
 

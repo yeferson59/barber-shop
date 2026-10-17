@@ -1,0 +1,48 @@
+---
+import { actions } from "astro:actions";
+import Layout from "@/layouts/Layout.astro";
+import ActionAlert from "@/components/ActionAlert.astro";
+import Logo from "@/components/Logo.astro";
+import { findInvite } from "@/lib/invite";
+
+// El middleware ya exige sesión para /unirse.
+const user = Astro.locals.user!;
+if (Astro.getActionResult(actions.barbers.claim)?.data)
+  return Astro.redirect("/panel");
+
+const token = Astro.params.token ?? "";
+const invite = await findInvite(token);
+---
+
+<Layout title="Unirte al equipo">
+  <div class="tile-wall flex min-h-[calc(100vh-4rem)] items-start justify-center px-4 py-12 sm:items-center">
+    <div class="w-full max-w-md rounded-xl border border-junta bg-loza p-6 shadow-[0_1px_0_var(--color-junta)] sm:p-8">
+      <Logo class="h-12 w-6 text-botella" />
+      <ActionAlert actions={[actions.barbers.claim]} />
+      {invite ? (
+        <>
+          <h1 class="mt-5 text-4xl">Hola, {invite.name}</h1>
+          <p class="mt-2 text-botella-2">
+            Vas a vincular la cuenta <strong>{user.email}</strong> a tu ficha de
+            barbero. Desde el panel verás y gestionarás tu agenda.
+          </p>
+          <form method="POST" action={actions.barbers.claim} class="mt-7">
+            <input type="hidden" name="token" value={token} />
+            <button class="btn-primary w-full py-3">Vincular mi cuenta</button>
+          </form>
+          <p class="mt-4 text-sm text-cromo">
+            ¿No es tu cuenta? Sal y vuelve a abrir el enlace con la correcta.
+          </p>
+        </>
+      ) : (
+        <>
+          <h1 class="mt-5 text-4xl">Enlace no válido</h1>
+          <p class="mt-2 text-botella-2">
+            Ha caducado o ya se usó. Pide al administrador uno nuevo.
+          </p>
+          <a class="link mt-6 inline-block" href="/">Volver al inicio</a>
+        </>
+      )}
+    </div>
+  </div>
+</Layout>

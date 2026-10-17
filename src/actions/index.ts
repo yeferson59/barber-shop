@@ -4,11 +4,13 @@ import {
   type ActionAPIContext,
 } from "astro:actions";
 import { z } from "astro/zod";
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, gt, inArray, ne } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
-import { db } from "@/db";
+import { auth } from "@/auth";
+import { db, writeTx, type Executor } from "@/db";
 import {
   APPOINTMENT_STATUSES,
+  account,
   appointment,
   barber,
   barberService,
@@ -17,6 +19,7 @@ import {
   shopSettings,
   timeOff,
   user,
+  verification,
   workingHours,
 } from "@/db/schema";
 import {
@@ -33,6 +36,16 @@ import {
   requireStaff,
   requireUser,
 } from "@/lib/guards";
+import {
+  clientInviteId,
+  createClientInvite,
+  findClientInvite,
+  findInvite,
+  hashInvite,
+  hasLogin,
+  isPlaceholderEmail,
+  newInvite,
+} from "@/lib/invite";
 import { atLocal, hhmmToMinutes, isDateStr } from "@/lib/time";
 
 const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -125,6 +138,13 @@ async function assertClientScope(ctx: ActionAPIContext, clientId: string) {
   }
   return staff;
 }
+
+/** Al quitarle la ficha de barbero, la cuenta vuelve a ser cliente (salvo admin). */
+const demoteToClient = (q: Executor, userId: string) =>
+  q
+    .update(user)
+    .set({ role: "user" })
+    .where(and(eq(user.id, userId), ne(user.role, "admin")));
 
 export const server = {
   // -------------------------------------------------------------------------
@@ -290,6 +310,75 @@ export const server = {
   },
 
   clients: {
+    /** Enlace para que un cliente creado desde el panel elija su contraseña. */
+    invite: defineAction({
+      accept: "form",
+      input: z.object({ clientId: id }),
+      handler: safe(async ({ clientId }, ctx) => {
+        await assertClientScope(ctx, clientId);
+        if (await hasLogin(clientId))
+          throw badRequest("Este cliente ya tiene cuenta en la web.");
+        return createClientInvite(clientId);
+      }),
+    }),
+
+    /** Público: el cliente canjea el enlace, pone su correo y una contraseña. */
+    activate: defineAction({
+      accept: "form",
+      input: z.object({
+        token: z.string().max(100),
+        email: z.email().max(254),
+        password: z.string().min(8).max(128),
+      }),
+      handler: safe(async (input) => {
+        const invalid = notFound(
+          "El enlace no es válido o ha caducado. Pide uno nuevo en la barbería.",
+        );
+        const client = await findClientInvite(input.token);
+        if (!client) throw invalid;
+        const email = input.email.toLowerCase();
+        if (isPlaceholderEmail(email)) throw badRequest("Usa tu correo real.");
+        if (email !== client.email) {
+          const taken = await db.query.user.findFirst({
+            where: eq(user.email, email),
+          });
+          if (taken)
+            throw badRequest(
+              "Ese correo ya tiene cuenta. Entra con él o usa otro.",
+            );
+        }
+        const hash = await (await auth.$context).password.hash(input.password);
+
+        await writeTx(async (tx) => {
+          // Borrar la invitación primero: el enlace solo se canjea una vez.
+          const [used] = await tx
+            .delete(verification)
+            .where(
+              and(
+                eq(verification.identifier, clientInviteId(input.token)),
+                gt(verification.expiresAt, new Date()),
+              ),
+            )
+            .returning({ id: verification.id });
+          if (!used) throw invalid;
+          await tx
+            .update(user)
+            .set({ email, updatedAt: new Date() })
+            .where(eq(user.id, client.id));
+          // Igual que el registro de better-auth: cuenta "credential" con su hash.
+          await tx.insert(account).values({
+            id: crypto.randomUUID(),
+            accountId: client.id,
+            providerId: "credential",
+            userId: client.id,
+            password: hash,
+            updatedAt: new Date(),
+          });
+        });
+        return { email };
+      }),
+    }),
+
     addNote: defineAction({
       accept: "form",
       input: z.object({
@@ -412,7 +501,6 @@ export const server = {
               .regex(/^(https?:\/\/|\/(?!\/))\S+$/, "URL de foto inválida"),
           ])
           .optional(),
-        email: optionalEmail,
         active: z.boolean().optional(),
         serviceIds: z.array(id).max(100).optional(),
       }),
@@ -423,58 +511,20 @@ export const server = {
           : undefined;
         if (input.id && !prev) throw notFound("Barbero no encontrado.");
 
-        const writes: BatchItem<"sqlite">[] = [];
-        let userId: string | null = null;
-        if (input.email) {
-          const linked = await db.query.user.findFirst({
-            where: eq(user.email, input.email.toLowerCase()),
-          });
-          if (!linked)
-            throw notFound(
-              `No existe una cuenta con ${input.email}. El barbero debe registrarse primero.`,
-            );
-          const other = await db.query.barber.findFirst({
-            where: and(
-              eq(barber.userId, linked.id),
-              input.id ? ne(barber.id, input.id) : undefined,
-            ),
-          });
-          if (other)
-            throw badRequest(
-              `Esa cuenta ya está vinculada al barbero ${other.name}.`,
-            );
-          userId = linked.id;
-          if (linked.role !== "admin")
-            writes.push(
-              db
-                .update(user)
-                .set({ role: "barber" })
-                .where(eq(user.id, linked.id)),
-            );
-        }
-        // Si se desvincula una cuenta, vuelve a ser cliente
-        if (prev?.userId && prev.userId !== userId)
-          writes.push(
-            db
-              .update(user)
-              .set({ role: "user" })
-              .where(and(eq(user.id, prev.userId), ne(user.role, "admin"))),
-          );
-
+        // La cuenta vinculada no se toca aquí: va por invitación (invite/claim).
         const barberId = prev?.id ?? crypto.randomUUID();
         const values = {
           name: input.name,
           bio: input.bio || null,
           photoUrl: input.photoUrl || null,
-          userId,
           active: prev ? (input.active ?? false) : true,
         };
-        writes.push(
+        const writes: BatchItem<"sqlite">[] = [
           prev
             ? db.update(barber).set(values).where(eq(barber.id, barberId))
             : db.insert(barber).values({ ...values, id: barberId }),
           db.delete(barberService).where(eq(barberService.barberId, barberId)),
-        );
+        ];
         const serviceIds = input.serviceIds?.length
           ? (
               await db
@@ -492,6 +542,87 @@ export const server = {
         const [first, ...rest] = writes;
         await db.batch([first, ...rest]);
         return { id: barberId };
+      }),
+    }),
+
+    /** Genera el enlace de vinculación; uno nuevo invalida el anterior. */
+    invite: defineAction({
+      accept: "form",
+      input: z.object({ id }),
+      handler: safe(async (input, ctx) => {
+        requireAdmin(ctx);
+        const { token, hash, expiresAt } = newInvite();
+        const [row] = await db
+          .update(barber)
+          .set({ inviteHash: hash, inviteExpiresAt: expiresAt })
+          .where(eq(barber.id, input.id))
+          .returning({ id: barber.id });
+        if (!row) throw notFound("Barbero no encontrado.");
+        return { id: row.id, token, expiresAt };
+      }),
+    }),
+
+    unlink: defineAction({
+      accept: "form",
+      input: z.object({ id }),
+      handler: safe(async (input, ctx) => {
+        requireAdmin(ctx);
+        const prev = await db.query.barber.findFirst({
+          where: eq(barber.id, input.id),
+        });
+        if (!prev) throw notFound("Barbero no encontrado.");
+        const unlink = db
+          .update(barber)
+          .set({ userId: null, inviteHash: null, inviteExpiresAt: null })
+          .where(eq(barber.id, prev.id));
+        await (prev.userId
+          ? db.batch([unlink, demoteToClient(db, prev.userId)])
+          : unlink);
+        return { id: prev.id };
+      }),
+    }),
+
+    /** El barbero, con su sesión iniciada, canjea el enlace que le pasó el admin. */
+    claim: defineAction({
+      accept: "form",
+      input: z.object({ token: z.string().max(100) }),
+      handler: safe(async (input, ctx) => {
+        const me = requireUser(ctx);
+        const invalid = notFound(
+          "El enlace no es válido o ha caducado. Pide uno nuevo al administrador.",
+        );
+        const target = await findInvite(input.token);
+        if (!target) throw invalid;
+        const other = await db.query.barber.findFirst({
+          where: and(eq(barber.userId, me.id), ne(barber.id, target.id)),
+        });
+        if (other)
+          throw badRequest(
+            `Tu cuenta ya está vinculada al barbero ${other.name}.`,
+          );
+
+        await writeTx(async (tx) => {
+          // Condicionado al hash: el enlace solo se canjea una vez.
+          const [claimed] = await tx
+            .update(barber)
+            .set({ userId: me.id, inviteHash: null, inviteExpiresAt: null })
+            .where(
+              and(
+                eq(barber.id, target.id),
+                eq(barber.inviteHash, hashInvite(input.token)),
+              ),
+            )
+            .returning({ id: barber.id });
+          if (!claimed) throw invalid;
+          if (target.userId && target.userId !== me.id)
+            await demoteToClient(tx, target.userId);
+          if (me.role !== "admin")
+            await tx
+              .update(user)
+              .set({ role: "barber" })
+              .where(eq(user.id, me.id));
+        });
+        return { barberId: target.id };
       }),
     }),
   },

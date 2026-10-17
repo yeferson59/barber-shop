@@ -25,3 +25,17 @@ export { schema };
 
 /** `db` o una transacción: para funciones que deben poder leer dentro de una. */
 export type Executor = BaseSQLiteDatabase<"async", ResultSet, typeof schema>;
+
+// Transacción de escritura (BEGIN IMMEDIATE): la BD bloquea a cualquier otro
+// escritor, también de otras instancias del servidor. Dentro de un mismo
+// proceso, además, se encolan: con `file:` el cliente es síncrono y esperar el
+// bloqueo congelaría el proceso que lo tiene.
+let queue: Promise<unknown> = Promise.resolve();
+export function writeTx<T>(fn: (tx: Executor) => Promise<T>): Promise<T> {
+  const run = queue.then(
+    () => db.transaction(fn),
+    () => db.transaction(fn),
+  );
+  queue = run.catch(() => {});
+  return run;
+}

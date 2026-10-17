@@ -15,6 +15,13 @@
       "when": 1792253103718,
       "tag": "0001_aberrant_ben_parker",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792253571522,
+      "tag": "0002_lonely_molten_man",
+      "breakpoints": true
     }
   ]
 }

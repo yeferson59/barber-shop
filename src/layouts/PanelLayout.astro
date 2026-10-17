@@ -138,7 +138,8 @@ const isActive = (href: string) =>
       </main>
     </div>
     <script>
-      // Asocia cada <label class="label"> con el campo que le sigue y confirma formularios con data-confirm.
+      // Asocia cada <label class="label"> con el campo que le sigue, confirma
+      // formularios con data-confirm y copia al portapapeles con data-copy.
       let seq = 0;
       document.querySelectorAll<HTMLLabelElement>("label.label:not([for])").forEach((l) => {
         if (l.querySelector("input,select,textarea")) return;
@@ -150,6 +151,12 @@ const isActive = (href: string) =>
       document.querySelectorAll<HTMLFormElement>("form[data-confirm]").forEach((f) =>
         f.addEventListener("submit", (e) => {
           if (!confirm(f.dataset.confirm)) e.preventDefault();
+        }),
+      );
+      document.querySelectorAll<HTMLButtonElement>("[data-copy]").forEach((btn) =>
+        btn.addEventListener("click", async () => {
+          await navigator.clipboard.writeText(btn.dataset.copy!);
+          btn.textContent = "Copiado";
         }),
       );
     </script>

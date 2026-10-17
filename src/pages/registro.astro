@@ -107,7 +107,7 @@ if (Astro.locals.user) return Astro.redirect(next || "/");
       error.textContent =
         err.code === "USER_ALREADY_EXISTS" ||
         err.code === "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL"
-          ? "Ese correo ya tiene cuenta. Entra con él o usa otro."
+          ? "Ese correo ya tiene cuenta. Entra con él o usa otro. Si te apuntaron en la barbería, pide allí el enlace para activarla."
           : (err.message ?? "No se pudo crear la cuenta.");
       error.classList.remove("hidden");
       btn.disabled = false;

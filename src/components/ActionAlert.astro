@@ -1,5 +1,5 @@
 ---
-import type { ActionClient } from "astro:actions";
+import { isInputError, type ActionClient } from "astro:actions";
 
 interface Props {
   actions: ActionClient<any, any, any>[];
@@ -9,8 +9,12 @@ const { actions, success = "Cambios guardados." } = Astro.props;
 
 const results = actions.map((a) => Astro.getActionResult(a)).filter(Boolean);
 const error = results.find((r) => r?.error)?.error;
+// Los errores de validación de zod vienen en inglés y con el detalle técnico.
+const message = isInputError(error)
+  ? "Hay datos que no son válidos. Revísalos e inténtalo de nuevo."
+  : error?.message;
 const ok = results.some((r) => r?.data);
 ---
 
-{error && <p class="alert-error mb-4" role="alert">{error.message}</p>}
+{error && <p class="alert-error mb-4" role="alert">{message}</p>}
 {!error && ok && <p class="alert-ok mb-4" role="status">{success}</p>}

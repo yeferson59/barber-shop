@@ -1,7 +1,7 @@
 import { defineMiddleware } from "astro:middleware";
 import { loadSession } from "@/lib/session";
 
-const needsLogin = ["/mis-citas", "/panel"];
+const needsLogin = ["/mis-citas", "/panel", "/unirse"];
 const adminOnly = [
   "/panel/servicios",
   "/panel/barberos",

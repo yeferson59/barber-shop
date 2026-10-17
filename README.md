@@ -42,7 +42,7 @@ Usuarios de ejemplo:
 - Agenda diaria: completar, no asistió, cancelar, mover, crear cita manual (cliente por teléfono).
 - Clientes: búsqueda, historial, total gastado, notas internas.
 - Horarios semanales (con turno partido) y bloqueos / días libres / festivos.
-- Solo admin: estadísticas, servicios, barberos (vincular la cuenta de un barbero le da acceso al panel) y ajustes de reservas.
+- Solo admin: estadísticas, servicios, barberos (el admin genera un enlace de invitación de un solo uso; el barbero lo abre con su sesión iniciada y su cuenta queda vinculada, sin depender del correo) y ajustes de reservas.
 
 ## Estructura
 
