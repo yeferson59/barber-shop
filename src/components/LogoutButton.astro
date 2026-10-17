@@ -1,0 +1,22 @@
+---
+interface Props {
+  class?: string;
+}
+const { class: className } = Astro.props;
+---
+
+<button type="button" class={className} data-logout>
+  Salir
+</button>
+
+<script>
+  import { authClient } from "@/lib/auth-client";
+
+  document.querySelectorAll<HTMLButtonElement>("[data-logout]").forEach((btn) =>
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      await authClient.signOut();
+      window.location.href = "/";
+    }),
+  );
+</script>

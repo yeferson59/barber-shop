@@ -1,0 +1,112 @@
+---
+import { actions } from "astro:actions";
+import { desc, eq } from "drizzle-orm";
+import PanelLayout from "../../../layouts/PanelLayout.astro";
+import ActionAlert from "../../../components/ActionAlert.astro";
+import StatusBadge from "../../../components/StatusBadge.astro";
+import { db } from "../../../db";
+import { appointment, clientNote, user } from "../../../db/schema";
+import { fmt, formatPrice } from "../../../lib/time";
+
+const client = await db.query.user.findFirst({ where: eq(user.id, Astro.params.id!) });
+if (!client) return Astro.redirect("/panel/clientes");
+
+const [appts, notes] = await Promise.all([
+  db.query.appointment.findMany({
+    where: eq(appointment.clientId, client.id),
+    with: { service: true, barber: true },
+    orderBy: desc(appointment.startsAt),
+  }),
+  db
+    .select({ id: clientNote.id, body: clientNote.body, createdAt: clientNote.createdAt, author: user.name })
+    .from(clientNote)
+    .leftJoin(user, eq(user.id, clientNote.authorId))
+    .where(eq(clientNote.clientId, client.id))
+    .orderBy(desc(clientNote.createdAt)),
+]);
+
+const completed = appts.filter((a) => a.status === "completed");
+const spent = completed.reduce((n, a) => n + a.priceCents, 0);
+const noShows = appts.filter((a) => a.status === "no_show").length;
+const favorite = Object.entries(
+  completed.reduce<Record<string, number>>((m, a) => ((m[a.service.name] = (m[a.service.name] ?? 0) + 1), m), {}),
+).sort((a, b) => b[1] - a[1])[0]?.[0];
+const isPlaceholder = client.email.endsWith("@clientes.local");
+---
+
+<PanelLayout title={client.name}>
+  <a slot="actions" href="/panel/clientes" class="btn-ghost">Volver a clientes</a>
+  <ActionAlert actions={[actions.clients.addNote, actions.clients.updateProfile]} />
+
+  <div class="grid gap-6 lg:grid-cols-[1fr_340px]">
+    <div class="space-y-6">
+      <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div class="card p-4"><p class="text-xs text-cromo">Visitas</p><p class="font-display text-2xl">{completed.length}</p></div>
+        <div class="card p-4"><p class="text-xs text-cromo">Gastado</p><p class="font-display text-2xl">{formatPrice(spent)}</p></div>
+        <div class="card p-4"><p class="text-xs text-cromo">No asistió</p><p class="font-display text-2xl">{noShows}</p></div>
+        <div class="card p-4"><p class="text-xs text-cromo">Favorito</p><p class="truncate font-semibold">{favorite ?? "—"}</p></div>
+      </div>
+
+      <section class="card">
+        <h2 class="border-b border-junta px-5 py-3 text-xl">Historial de citas</h2>
+        <ul class="divide-y divide-junta text-sm">
+          {
+            appts.map((a) => (
+              <li class="flex flex-wrap items-center justify-between gap-2 px-5 py-3">
+                <div>
+                  <p class="font-medium">{a.service.name} <span class="font-normal text-botella-2">con {a.barber.name}</span></p>
+                  <p class="text-cromo">
+                    <a href={`/panel?fecha=${fmt(a.startsAt, "yyyy-MM-dd")}`} class="hover:underline">{fmt(a.startsAt, "EEE d MMM yyyy, HH:mm")}</a>
+                    {a.notes && <span class="block italic">“{a.notes}”</span>}
+                  </p>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="text-cromo">{formatPrice(a.priceCents)}</span>
+                  <StatusBadge status={a.status} />
+                </div>
+              </li>
+            ))
+          }
+          {appts.length === 0 && <li class="px-5 py-8 text-center text-cromo">Sin citas.</li>}
+        </ul>
+      </section>
+    </div>
+
+    <div class="space-y-6">
+      <form method="POST" action={actions.clients.updateProfile} class="card space-y-3 p-5">
+        <h2 class="text-xl">Datos</h2>
+        <input type="hidden" name="clientId" value={client.id} />
+        <div>
+          <label class="label">Nombre</label>
+          <input class="input" name="name" value={client.name} required />
+        </div>
+        <div>
+          <label class="label">Teléfono</label>
+          <input class="input" name="phone" value={client.phone ?? ""} />
+        </div>
+        <p class="text-sm text-cromo">{isPlaceholder ? "Sin correo (creado desde el panel)" : client.email}</p>
+        <p class="text-xs text-cromo">Cliente desde {fmt(client.createdAt, "MMMM yyyy")}</p>
+        <button class="btn-dark btn-sm">Guardar</button>
+      </form>
+
+      <section class="card p-5">
+        <h2 class="text-xl">Notas internas</h2>
+        <form method="POST" action={actions.clients.addNote} class="mt-3 space-y-2">
+          <input type="hidden" name="clientId" value={client.id} />
+          <textarea class="input" name="body" rows="3" required placeholder="Preferencias, alergias, estilo habitual…"></textarea>
+          <button class="btn-primary btn-sm">Añadir nota</button>
+        </form>
+        <ul class="mt-4 space-y-3 text-sm">
+          {
+            notes.map((n) => (
+              <li class="rounded-lg bg-azulejo/60 p-3">
+                <p class="whitespace-pre-line">{n.body}</p>
+                <p class="mt-1 text-xs text-cromo">{n.author ?? "Alguien del equipo"}, {fmt(n.createdAt, "d MMM yyyy")}</p>
+              </li>
+            ))
+          }
+        </ul>
+      </section>
+    </div>
+  </div>
+</PanelLayout>

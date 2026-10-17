@@ -1,0 +1,172 @@
+---
+import { actions } from "astro:actions";
+import { asc, desc } from "drizzle-orm";
+import PanelLayout from "@/layouts/PanelLayout.astro";
+import ActionAlert from "@/components/ActionAlert.astro";
+import { db } from "@/db";
+import { service } from "@/db/schema";
+import { formatPrice } from "@/lib/time";
+
+const services = await db
+  .select()
+  .from(service)
+  .orderBy(desc(service.active), asc(service.name));
+
+const deleted = Astro.getActionResult(actions.services.delete);
+---
+
+<PanelLayout title="Servicios">
+  <ActionAlert
+    actions={[actions.services.save, actions.services.delete]}
+    success={
+      deleted?.data?.deactivated
+        ? "El servicio tiene historial, así que se desactivó en lugar de borrarse."
+        : "Cambios guardados."
+    }
+  />
+
+  <div class="grid gap-6 lg:grid-cols-[1fr_360px]">
+    <div class="space-y-3">
+      {services.map((s) => (
+        <details class:list={["card", !s.active && "opacity-60"]}>
+          <summary class="flex cursor-pointer flex-wrap items-center justify-between gap-3 px-5 py-4">
+            <div>
+              <p class="font-semibold">
+                {s.name}{" "}
+                {!s.active && (
+                  <span class="badge ml-1 bg-junta text-botella-2">
+                    Inactivo
+                  </span>
+                )}
+              </p>
+              <p class="text-sm text-cromo">
+                {formatPrice(s.priceCents)}, {s.durationMin} min
+              </p>
+            </div>
+            <span class="text-sm text-botella underline decoration-junta decoration-2 underline-offset-4">
+              Editar
+            </span>
+          </summary>
+          <div class="border-t border-junta px-5 py-4">
+            <form
+              method="POST"
+              action={actions.services.save}
+              class="grid gap-3 sm:grid-cols-2"
+            >
+              <input type="hidden" name="id" value={s.id} />
+              <div class="sm:col-span-2">
+                <label class="label">Nombre</label>
+                <input class="input" name="name" value={s.name} required />
+              </div>
+              <div class="sm:col-span-2">
+                <label class="label">Descripción</label>
+                <input
+                  class="input"
+                  name="description"
+                  value={s.description ?? ""}
+                />
+              </div>
+              <div>
+                <label class="label">Duración (min)</label>
+                <input
+                  class="input"
+                  type="number"
+                  name="durationMin"
+                  min="5"
+                  step="5"
+                  value={s.durationMin}
+                  required
+                />
+              </div>
+              <div>
+                <label class="label">Precio</label>
+                <input
+                  class="input"
+                  type="number"
+                  name="price"
+                  min="0"
+                  step="any"
+                  value={s.priceCents / 100}
+                  required
+                />
+              </div>
+              <label class="flex items-center gap-2 text-sm">
+                <input type="checkbox" name="active" checked={s.active} />{" "}
+                Activo (visible para reservar)
+              </label>
+              <div class="flex justify-end gap-2 sm:col-span-2">
+                <button class="btn-primary btn-sm">Guardar</button>
+              </div>
+            </form>
+            <form
+              method="POST"
+              action={actions.services.delete}
+              class="mt-2 text-right"
+              data-confirm="¿Eliminar este servicio?"
+            >
+              <input type="hidden" name="id" value={s.id} />
+              <button class="text-xs text-red-600 hover:underline">
+                Eliminar
+              </button>
+            </form>
+          </div>
+        </details>
+      ))}
+    </div>
+
+    <form
+      method="POST"
+      action={actions.services.save}
+      class="card space-y-3 p-5 lg:self-start"
+    >
+      <h2 class="text-xl">Nuevo servicio</h2>
+      <div>
+        <label class="label">Nombre</label>
+        <input class="input" name="name" required />
+      </div>
+      <div>
+        <label class="label">Descripción</label>
+        <input class="input" name="description" />
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="label">Duración (min)</label>
+          <input
+            class="input"
+            type="number"
+            name="durationMin"
+            min="5"
+            step="5"
+            value="30"
+            required
+          />
+        </div>
+        <div>
+          <label class="label">Precio</label>
+          <input
+            class="input"
+            type="number"
+            name="price"
+            min="0"
+            step="any"
+            required
+          />
+        </div>
+      </div>
+      <button class="btn-primary w-full">Crear</button>
+      <p class="text-xs text-cromo">
+        Se asigna a todos los barberos; ajústalo en “Barberos”.
+      </p>
+    </form>
+  </div>
+</PanelLayout>
+
+<script>
+  document
+    .querySelectorAll<HTMLFormElement>("form[data-confirm]")
+    .forEach((f) =>
+      f.addEventListener("submit", (e) => {
+        if (!confirm(f.dataset.confirm)) e.preventDefault();
+      }),
+    );
+</script>

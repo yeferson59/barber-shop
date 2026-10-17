@@ -1,0 +1,19 @@
+---
+interface Props {
+  barbers: { id: string; name: string }[];
+  selectedId: string;
+}
+const { barbers, selectedId } = Astro.props;
+---
+
+{
+  barbers.length > 1 && (
+    <div class="mb-6 flex flex-wrap gap-2">
+      {barbers.map((b) => (
+        <a href={`?barbero=${b.id}`} class:list={["btn-sm", b.id === selectedId ? "btn-dark" : "btn-ghost"]}>
+          {b.name}
+        </a>
+      ))}
+    </div>
+  )
+}

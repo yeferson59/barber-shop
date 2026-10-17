@@ -1,0 +1,111 @@
+---
+import { actions } from "astro:actions";
+import { asc, eq } from "drizzle-orm";
+import PanelLayout from "@/layouts/PanelLayout.astro";
+import ActionAlert from "@/components/ActionAlert.astro";
+import BarberPicker from "@/components/BarberPicker.astro";
+import { db } from "@/db";
+import { workingHours } from "@/db/schema";
+import { scopedBarbers } from "@/lib/panel";
+import { WEEKDAYS, minutesToHHMM } from "@/lib/time";
+
+const { barbers, selected } = await scopedBarbers(Astro.locals, Astro.url);
+const hours = selected
+  ? await db
+      .select()
+      .from(workingHours)
+      .where(eq(workingHours.barberId, selected.id))
+      .orderBy(asc(workingHours.startMin))
+  : [];
+const shiftsOf = (weekday: number) =>
+  hours.filter((h) => h.weekday === weekday);
+const order = [1, 2, 3, 4, 5, 6, 0];
+---
+
+<PanelLayout title="Horarios">
+  <ActionAlert actions={[actions.schedule.save]} success="Horario guardado." />
+  {!selected ? (
+    <p class="card p-6 text-cromo">No hay barberos para gestionar.</p>
+  ) : (
+    <>
+      <BarberPicker barbers={barbers} selectedId={selected.id} />
+      <form
+        method="POST"
+        action={actions.schedule.save}
+        class="card max-w-3xl p-5"
+      >
+        <input type="hidden" name="barberId" value={selected.id} />
+        <p class="mb-4 text-sm text-cromo">
+          Horario semanal de <b>{selected.name}</b>. Deja un turno vacío si no
+          trabaja. Usa el segundo turno para horarios partidos (p. ej. después
+          del almuerzo).
+        </p>
+        <div class="hidden gap-3 border-b border-junta pb-2 text-sm text-cromo sm:grid sm:grid-cols-[110px_1fr_1fr]">
+          <span />
+          <span>Primer turno</span>
+          <span>Segundo turno (opcional)</span>
+        </div>
+        <div class="divide-y divide-junta">
+          {order.map((d) => {
+            const [s1, s2] = shiftsOf(d);
+            return (
+              <div class="grid items-center gap-3 py-3 sm:grid-cols-[110px_1fr_1fr]">
+                <span class="font-medium">{WEEKDAYS[d]}</span>
+                <div class="flex items-center gap-2">
+                  <input
+                    class="input py-1"
+                    type="time"
+                    name={`d${d}_1_start`}
+                    value={s1 ? minutesToHHMM(s1.startMin) : ""}
+                  />
+                  <span class="text-cromo">–</span>
+                  <input
+                    class="input py-1"
+                    type="time"
+                    name={`d${d}_1_end`}
+                    value={s1 ? minutesToHHMM(s1.endMin) : ""}
+                  />
+                </div>
+                <div class="flex items-center gap-2">
+                  <input
+                    class="input py-1"
+                    type="time"
+                    name={`d${d}_2_start`}
+                    value={s2 ? minutesToHHMM(s2.startMin) : ""}
+                  />
+                  <span class="text-cromo">–</span>
+                  <input
+                    class="input py-1"
+                    type="time"
+                    name={`d${d}_2_end`}
+                    value={s2 ? minutesToHHMM(s2.endMin) : ""}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div class="mt-4 flex gap-2">
+          <button class="btn-primary">Guardar horario</button>
+          <button type="button" class="btn-ghost" data-copy-monday>
+            Copiar lunes a todos los días laborables
+          </button>
+        </div>
+      </form>
+    </>
+  )}
+</PanelLayout>
+
+<script>
+  document
+    .querySelector("[data-copy-monday]")
+    ?.addEventListener("click", (e) => {
+      const form = (e.currentTarget as HTMLElement).closest("form")!;
+      const get = (name: string) =>
+        form.querySelector<HTMLInputElement>(`[name="${name}"]`)!;
+      for (const d of [2, 3, 4, 5, 6])
+        for (const n of [1, 2])
+          for (const k of ["start", "end"])
+            get(`d${d}_${n}_${k}`).value = get(`d1_${n}_${k}`).value;
+    });
+</script>

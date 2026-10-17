@@ -1,0 +1,21 @@
+---
+interface Props {
+  class?: string;
+}
+const { class: className } = Astro.props;
+---
+
+<!-- Poste de barbería -->
+<svg class={className} viewBox="0 0 20 40" fill="none" aria-hidden="true">
+  <defs>
+    <clipPath id="pole"><rect x="4" y="7" width="12" height="26" rx="1" /></clipPath>
+  </defs>
+  <rect x="4" y="7" width="12" height="26" rx="1" fill="#f8fbf9" />
+  <g clip-path="url(#pole)">
+    <path d="M-2 14 18 2M-2 24 18 12M-2 34 18 22M-2 44 18 32" stroke="#c42b2b" stroke-width="3.2" />
+    <path d="M-2 19 18 7M-2 29 18 17M-2 39 18 27" stroke="#0f2e26" stroke-width="1.6" />
+  </g>
+  <rect x="4" y="7" width="12" height="26" rx="1" stroke="currentColor" stroke-width="1.5" />
+  <rect x="2" y="2" width="16" height="5" rx="2.5" fill="currentColor" />
+  <rect x="2" y="33" width="16" height="5" rx="2.5" fill="currentColor" />
+</svg>

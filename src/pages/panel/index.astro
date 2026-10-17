@@ -1,0 +1,401 @@
+---
+import { actions } from "astro:actions";
+import { and, asc, eq, gte, inArray, lt } from "drizzle-orm";
+import PanelLayout from "@/layouts/PanelLayout.astro";
+import ActionAlert from "@/components/ActionAlert.astro";
+import StatusBadge from "@/components/StatusBadge.astro";
+import TileRow from "@/components/TileRow.astro";
+import HourRuler from "@/components/HourRuler.astro";
+import { getOccupancy } from "@/lib/availability";
+import { dayRangeOf, freeMinutesLeft, toTiles } from "@/lib/live";
+import { db } from "@/db";
+import { appointment, barber, service, user } from "@/db/schema";
+import {
+  addDaysStr,
+  dayRange,
+  fmtDateStr,
+  fmtTime,
+  formatPrice,
+  isDateStr,
+  minutesOfDay,
+  todayStr,
+  ucfirst,
+} from "@/lib/time";
+
+const me = Astro.locals.user!;
+const isAdmin = me.role === "admin";
+const today = todayStr();
+const qDate = Astro.url.searchParams.get("fecha") ?? "";
+const date = isDateStr(qDate) ? qDate : today;
+const { start, end } = dayRange(date);
+
+const allBarbers = await db
+  .select()
+  .from(barber)
+  .where(eq(barber.active, true))
+  .orderBy(asc(barber.name));
+const barbers = isAdmin
+  ? allBarbers
+  : allBarbers.filter((b) => b.id === Astro.locals.barberId);
+const barberIds = barbers.map((b) => b.id);
+
+const [appts, services, clients] = await Promise.all([
+  barberIds.length
+    ? db.query.appointment.findMany({
+        where: and(
+          inArray(appointment.barberId, barberIds),
+          gte(appointment.startsAt, start),
+          lt(appointment.startsAt, end),
+        ),
+        with: { client: true, service: true },
+        orderBy: asc(appointment.startsAt),
+      })
+    : [],
+  db
+    .select()
+    .from(service)
+    .where(eq(service.active, true))
+    .orderBy(asc(service.name)),
+  db
+    .select({ email: user.email, name: user.name })
+    .from(user)
+    .where(eq(user.role, "user"))
+    .orderBy(asc(user.name)),
+]);
+
+const occupancy = (await getOccupancy(date, 1)).filter((o) =>
+  barberIds.includes(o.barberId),
+);
+const range = dayRangeOf(occupancy);
+const nowMin = date === today ? minutesOfDay(new Date()) : null;
+const wallOf = (barberId: string) => {
+  const day = occupancy.find((o) => o.barberId === barberId)?.days[0];
+  return day ? toTiles(day, range, nowMin) : [];
+};
+
+const active = appts.filter((a) => a.status !== "cancelled");
+const expected = active.reduce((n, a) => n + a.priceCents, 0);
+const done = appts.filter((a) => a.status === "completed").length;
+
+const formActions = [
+  actions.agenda.setStatus,
+  actions.agenda.reschedule,
+  actions.agenda.createManual,
+];
+const createResult = Astro.getActionResult(actions.agenda.createManual);
+const isPast = (a: (typeof appts)[number]) => a.startsAt.getTime() < Date.now();
+---
+
+<PanelLayout title="Agenda">
+  <form slot="actions" class="flex flex-wrap items-center gap-2" method="GET">
+    <a class="btn-ghost btn-sm" href={`?fecha=${addDaysStr(date, -1)}`}>
+      ‹
+    </a>
+    <a
+      class:list={["btn-sm", date === today ? "btn-dark" : "btn-ghost"]}
+      href="/panel"
+    >
+      Hoy
+    </a>
+    <a class="btn-ghost btn-sm" href={`?fecha=${addDaysStr(date, 1)}`}>
+      ›
+    </a>
+    <input
+      type="date"
+      name="fecha"
+      value={date}
+      class="input w-auto py-1"
+      onchange="this.form.submit()"
+    />
+  </form>
+
+  <ActionAlert actions={formActions} />
+
+  <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
+    <p class="text-lg">{ucfirst(fmtDateStr(date))}</p>
+    <div class="flex flex-wrap gap-2 text-sm">
+      <span class="card px-3 py-1.5">
+        <b>{active.length}</b> citas
+      </span>
+      <span class="card px-3 py-1.5">
+        <b>{done}</b> completadas
+      </span>
+      <span class="card px-3 py-1.5">
+        Estimado <b>{formatPrice(expected)}</b>
+      </span>
+    </div>
+  </div>
+
+  {barbers.length === 0 ? (
+    <p class="card p-6 text-cromo">
+      Tu usuario no está vinculado a ningún barbero. Pide al administrador que
+      te vincule en “Barberos”.
+    </p>
+  ) : (
+    <>
+      <details class="card mb-6 p-5" open={Boolean(createResult?.error)}>
+        <summary class="cursor-pointer font-semibold">
+          + Nueva cita (cliente por teléfono o sin reserva)
+        </summary>
+        <form
+          method="POST"
+          action={actions.agenda.createManual}
+          class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+        >
+          <div>
+            <label class="label">Correo del cliente</label>
+            <input
+              class="input"
+              name="email"
+              type="email"
+              list="clients"
+              placeholder="Si ya es cliente, búscalo aquí"
+            />
+            <datalist id="clients">
+              {clients.map((c) => (
+                <option value={c.email}>{c.name}</option>
+              ))}
+            </datalist>
+          </div>
+          <div>
+            <label class="label">Nombre (si es nuevo)</label>
+            <input class="input" name="name" />
+          </div>
+          <div>
+            <label class="label">Teléfono</label>
+            <input class="input" name="phone" type="tel" />
+          </div>
+          <div>
+            <label class="label">Servicio</label>
+            <select class="input" name="serviceId" required>
+              {services.map((s) => (
+                <option value={s.id}>
+                  {s.name} ({s.durationMin} min)
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label class="label">Barbero</label>
+            <select class="input" name="barberId" required>
+              {barbers.map((b) => (
+                <option value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label class="label">Fecha</label>
+            <input
+              class="input"
+              type="date"
+              name="date"
+              value={date}
+              required
+            />
+          </div>
+          <div>
+            <label class="label">Hora</label>
+            <input class="input" type="time" name="time" step="300" required />
+          </div>
+          <div>
+            <label class="label">Notas</label>
+            <input class="input" name="notes" />
+          </div>
+          <div class="sm:col-span-2 lg:col-span-4">
+            <button class="btn-primary">Crear cita</button>
+          </div>
+        </form>
+      </details>
+
+      <div class:list={["grid gap-6", barbers.length > 1 && "xl:grid-cols-2"]}>
+        {barbers.map((b) => {
+          const list = appts.filter((a) => a.barberId === b.id);
+          return (
+            <section class="card overflow-hidden">
+              <header class="border-b border-junta px-5 pt-4 pb-5">
+                <div class="flex items-baseline justify-between gap-3">
+                  <h2 class="text-2xl">{b.name}</h2>
+                  <span class="text-sm text-cromo">
+                    {list.filter((a) => a.status !== "cancelled").length} citas,{" "}
+                    {Math.round(freeMinutesLeft(wallOf(b.id)) / 30) / 2} h
+                    libres
+                  </span>
+                </div>
+                {wallOf(b.id).length > 0 && (
+                  <div class="mt-3">
+                    <HourRuler open={range.open} close={range.close} />
+                    <TileRow tiles={wallOf(b.id)} nowMin={nowMin} />
+                  </div>
+                )}
+              </header>
+              {list.length === 0 ? (
+                <p class="px-5 py-8 text-center text-sm text-cromo">
+                  Sin citas este día.
+                </p>
+              ) : (
+                <ul class="divide-y divide-junta">
+                  {list.map((a) => (
+                    <li
+                      class:list={[
+                        "px-5 py-4",
+                        a.status === "cancelled" && "opacity-50",
+                      ]}
+                    >
+                      <div class="flex flex-wrap items-start gap-4">
+                        <div class="w-16 shrink-0">
+                          <p class="font-display text-xl leading-none">
+                            {fmtTime(a.startsAt)}
+                          </p>
+                          <p class="text-xs text-cromo">{fmtTime(a.endsAt)}</p>
+                        </div>
+                        <div class="min-w-0 flex-1">
+                          <a
+                            href={`/panel/clientes/${a.clientId}`}
+                            class="font-semibold hover:text-poste"
+                          >
+                            {a.client.name}
+                          </a>
+                          <p class="text-sm text-botella-2">
+                            {a.service.name}, {formatPrice(a.priceCents)}
+                          </p>
+                          {a.client.phone && (
+                            <a
+                              href={`tel:${a.client.phone.replace(/\s/g, "")}`}
+                              class="text-sm text-cromo hover:underline"
+                            >
+                              {a.client.phone}
+                            </a>
+                          )}
+                          {a.notes && (
+                            <p class="mt-1 text-sm text-botella-2 italic">
+                              “{a.notes}”
+                            </p>
+                          )}
+                        </div>
+                        {a.status !== "confirmed" && (
+                          <StatusBadge status={a.status} />
+                        )}
+                      </div>
+                      {a.status === "confirmed" && (
+                        <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 pl-20">
+                          {isPast(a) && (
+                            <>
+                              <form
+                                method="POST"
+                                action={actions.agenda.setStatus}
+                              >
+                                <input type="hidden" name="id" value={a.id} />
+                                <button
+                                  name="status"
+                                  value="completed"
+                                  class="btn-primary btn-sm"
+                                >
+                                  Completada
+                                </button>
+                              </form>
+                              <form
+                                method="POST"
+                                action={actions.agenda.setStatus}
+                              >
+                                <input type="hidden" name="id" value={a.id} />
+                                <button
+                                  name="status"
+                                  value="no_show"
+                                  class="btn-ghost btn-sm"
+                                >
+                                  No vino
+                                </button>
+                              </form>
+                            </>
+                          )}
+                          <form
+                            method="POST"
+                            action={actions.agenda.setStatus}
+                            data-confirm="¿Cancelar la cita?"
+                          >
+                            <input type="hidden" name="id" value={a.id} />
+                            <button
+                              name="status"
+                              value="cancelled"
+                              class="text-sm text-poste-2 hover:underline"
+                            >
+                              Cancelar
+                            </button>
+                          </form>
+                          <details class="group">
+                            <summary class="cursor-pointer list-none text-sm text-botella-2 hover:underline">
+                              Mover
+                            </summary>
+                            <form
+                              method="POST"
+                              action={actions.agenda.reschedule}
+                              class="mt-2 flex w-full flex-wrap items-end gap-2"
+                            >
+                              <input type="hidden" name="id" value={a.id} />
+                              <select class="input w-auto py-1" name="barberId">
+                                {barbers.map((x) => (
+                                  <option
+                                    value={x.id}
+                                    selected={x.id === a.barberId}
+                                  >
+                                    {x.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                class="input w-auto py-1"
+                                type="date"
+                                name="date"
+                                value={date}
+                                required
+                              />
+                              <input
+                                class="input w-auto py-1"
+                                type="time"
+                                name="time"
+                                value={fmtTime(a.startsAt)}
+                                step="300"
+                                required
+                              />
+                              <button class="btn-dark btn-sm">Mover</button>
+                            </form>
+                          </details>
+                        </div>
+                      )}
+                      {a.status !== "confirmed" && a.status !== "cancelled" && (
+                        <form
+                          method="POST"
+                          action={actions.agenda.setStatus}
+                          class="mt-2 pl-20"
+                        >
+                          <input type="hidden" name="id" value={a.id} />
+                          <button
+                            name="status"
+                            value="confirmed"
+                            class="text-sm text-cromo hover:text-botella hover:underline"
+                          >
+                            Volver a confirmada
+                          </button>
+                        </form>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          );
+        })}
+      </div>
+    </>
+  )}
+</PanelLayout>
+
+<script>
+  document
+    .querySelectorAll<HTMLFormElement>("form[data-confirm]")
+    .forEach((f) =>
+      f.addEventListener("submit", (e) => {
+        if (!confirm(f.dataset.confirm)) e.preventDefault();
+      }),
+    );
+</script>

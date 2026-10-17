@@ -1,0 +1,31 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import BookingWizard from "@/components/islands/BookingWizard";
+import { getBookingCatalog } from "@/lib/catalog";
+
+const catalog = await getBookingCatalog();
+const q = Astro.url.searchParams;
+const initial = {
+  serviceId: q.get("service") ?? undefined,
+  barberId: q.get("barber") ?? undefined,
+  date: q.get("date") ?? undefined,
+  time: q.get("time") ?? undefined,
+};
+---
+
+<Layout title="Reservar cita">
+  <div class="mx-auto max-w-6xl px-4 pt-12 pb-28 sm:px-6 sm:pt-16 lg:pb-20">
+    <h1 class="text-5xl sm:text-6xl">Reserva tu cita</h1>
+    <p class="mt-4 max-w-xl text-lg text-botella-2">
+      Solo te mostramos horas que de verdad están libres.
+    </p>
+    <div class="mt-10">
+      <BookingWizard
+        client:load
+        {...catalog}
+        loggedIn={Boolean(Astro.locals.user)}
+        initial={initial}
+      />
+    </div>
+  </div>
+</Layout>

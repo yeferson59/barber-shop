@@ -1,0 +1,51 @@
+---
+import Logo from "./Logo.astro";
+import type { ShopSettings } from "@/lib/settings";
+
+interface Props {
+  settings: ShopSettings;
+}
+const { settings } = Astro.props;
+---
+
+<footer class="bg-botella text-azulejo">
+  <div class="mx-auto grid max-w-6xl gap-8 px-4 py-12 sm:grid-cols-[1.4fr_1fr_1fr] sm:px-6">
+    <div class="flex items-start gap-3">
+      <Logo class="h-11 w-5.5 shrink-0 text-azulejo" />
+      <div>
+        <p class="font-display text-2xl text-loza">{settings.name}</p>
+        <p class="mt-2 max-w-xs text-sm text-azulejo/75">
+          Reservas en línea, sin llamadas. Si prefieres hablar con nosotros,
+          también contestamos.
+        </p>
+      </div>
+    </div>
+    <div class="text-sm">
+      <p class="font-semibold text-loza">Dónde estamos</p>
+      {settings.address && <p class="mt-2">{settings.address}</p>}
+      {settings.phone && (
+        <a
+          href={`tel:${settings.phone.replace(/\s/g, "")}`}
+          class="mt-1 block hover:text-loza"
+        >
+          {settings.phone}
+        </a>
+      )}
+    </div>
+    <div class="flex flex-col gap-1.5 text-sm">
+      <p class="font-semibold text-loza">Tu cuenta</p>
+      <a href="/agendar" class="mt-1 hover:text-loza">
+        Reservar cita
+      </a>
+      <a href="/mis-citas" class="hover:text-loza">
+        Mis citas
+      </a>
+      <a href="/disponibilidad" class="hover:text-loza">
+        Disponibilidad de la semana
+      </a>
+    </div>
+  </div>
+  <p class="border-t border-white/10 px-4 py-4 text-center text-xs text-azulejo/60">
+    © {new Date().getFullYear()} {settings.name}
+  </p>
+</footer>

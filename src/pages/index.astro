@@ -1,11 +1,313 @@
 ---
-import Welcome from '../components/Welcome.astro';
-import Layout from '../layouts/Layout.astro';
+import { asc, eq } from "drizzle-orm";
+import Layout from "@/layouts/Layout.astro";
+import TileRow from "@/components/TileRow.astro";
+import HourRuler from "@/components/HourRuler.astro";
+import { db } from "@/db";
+import { barber, service, workingHours } from "@/db/schema";
+import { getOccupancy } from "@/lib/availability";
+import { dayRangeOf, liveStatus, toTiles } from "@/lib/live";
+import { getSettings } from "@/lib/settings";
+import {
+  WEEKDAYS,
+  fmt,
+  formatPrice,
+  minutesOfDay,
+  minutesToHHMM,
+  todayStr,
+  ucfirst,
+} from "@/lib/time";
 
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+const today = todayStr();
+const now = new Date();
+const nowMin = minutesOfDay(now);
+
+const [settings, services, barbers, hours, occupancy] = await Promise.all([
+  getSettings(),
+  db
+    .select()
+    .from(service)
+    .where(eq(service.active, true))
+    .orderBy(asc(service.priceCents)),
+  db
+    .select()
+    .from(barber)
+    .where(eq(barber.active, true))
+    .orderBy(asc(barber.name)),
+  db.select().from(workingHours),
+  getOccupancy(today, 1),
+]);
+
+const range = dayRangeOf(occupancy);
+const board = occupancy.map((b) => ({
+  ...b,
+  status: liveStatus(b.days[0], nowMin),
+  tiles: toTiles(b.days[0], range, nowMin),
+}));
+const openToday = board.some((b) => b.days[0].hours.length > 0);
+
+// Horario general: el primer y último minuto en que trabaja algún barbero
+const schedule = [1, 2, 3, 4, 5, 6, 0].map((weekday) => {
+  const day = hours.filter((h) => h.weekday === weekday);
+  const isToday =
+    WEEKDAYS[weekday] === WEEKDAYS[new Date(`${today}T12:00:00`).getDay()];
+  if (day.length === 0)
+    return { day: WEEKDAYS[weekday], text: "Cerrado", isToday };
+  const open = Math.min(...day.map((h) => h.startMin));
+  const close = Math.max(...day.map((h) => h.endMin));
+  return {
+    day: WEEKDAYS[weekday],
+    text: `${minutesToHHMM(open)} a ${minutesToHHMM(close)}`,
+    isToday,
+  };
+});
+
+const initials = (name: string) =>
+  name
+    .split(" ")
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join("");
+const firstName = (name: string) => name.split(" ")[0];
 ---
 
 <Layout>
-	<Welcome />
+  <!-- Portada: la pared de hoy -->
+  <section class="mx-auto max-w-6xl px-4 pt-12 pb-16 sm:px-6 sm:pt-20">
+    <div class="max-w-3xl">
+      <h1 class="text-hero">Siéntate a tu hora.</h1>
+      <p class="mt-6 max-w-xl text-lg leading-relaxed text-botella-2">
+        Elige servicio, barbero y hora desde el celular. Abajo ves la barbería
+        tal como está ahora: cada cuadro es media hora y los verdes ya están
+        ocupados.
+      </p>
+      <div class="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
+        <a href="/agendar" class="btn-primary px-6 py-4 text-base">
+          Reservar cita
+        </a>
+        <a href="/disponibilidad" class="link">
+          Ver toda la semana
+        </a>
+      </div>
+    </div>
+
+    <div class="mt-12 rounded-xl border border-junta bg-loza p-4 sm:p-6">
+      <div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+        <div>
+          <h2 class="text-2xl sm:text-3xl">Ahora en la barbería</h2>
+          <p class="mt-1 text-sm text-cromo">
+            {ucfirst(fmt(now, "EEEE d 'de' MMMM"))}
+          </p>
+        </div>
+        <p
+          class="font-display text-4xl tabular-nums sm:text-5xl"
+          aria-label={`Son las ${fmt(now, "HH:mm")}`}
+        >
+          {fmt(now, "HH:mm")}
+        </p>
+      </div>
+
+      {!openToday ? (
+        <p class="mt-6 rounded-md bg-azulejo px-4 py-5 text-botella-2">
+          Hoy no abrimos. Puedes{" "}
+          <a href="/agendar" class="link">
+            reservar para otro día
+          </a>
+          .
+        </p>
+      ) : (
+        <div class="mt-6">
+          <div class="hidden sm:grid sm:grid-cols-[15rem_1fr] sm:gap-6">
+            <span />
+            <HourRuler open={range.open} close={range.close} />
+          </div>
+          <ul class="divide-y divide-junta">
+            {board.map((b) => (
+              <li class="grid gap-3 py-4 sm:grid-cols-[15rem_1fr] sm:items-center sm:gap-6">
+                <a
+                  href={`/agendar?barber=${b.barberId}&date=${today}`}
+                  class="group flex items-center gap-3"
+                >
+                  <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-botella font-display text-lg text-loza">
+                    {initials(b.name)}
+                  </span>
+                  <span class="min-w-0">
+                    <span class="block font-semibold group-hover:underline">
+                      {b.name}
+                    </span>
+                    <span class="flex items-center gap-1.5 text-sm text-botella-2">
+                      <span
+                        class:list={[
+                          "h-2 w-2 shrink-0 rounded-full",
+                          b.status.tone === "free"
+                            ? "bg-loza ring-2 ring-botella"
+                            : b.status.tone === "busy"
+                              ? "bg-botella"
+                              : "bg-junta",
+                        ]}
+                      />
+                      {b.status.text}
+                    </span>
+                  </span>
+                </a>
+                <div>
+                  <div class="sm:hidden">
+                    <HourRuler open={range.open} close={range.close} />
+                  </div>
+                  <TileRow tiles={b.tiles} nowMin={nowMin} size="lg" animate />
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div class="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-cromo sm:pl-6]">
+            <span class="flex items-center gap-2">
+              <span class="h-3.5 w-3.5 rounded-sm border border-junta bg-loza" />
+              Libre
+            </span>
+            <span class="flex items-center gap-2">
+              <span class="h-3.5 w-3.5 rounded-sm bg-botella" />
+              Ocupado
+            </span>
+            <span class="flex items-center gap-2">
+              <span
+                class="h-3.5 w-3.5 rounded-sm border border-junta"
+                style="background: repeating-linear-gradient(135deg, var(--color-azulejo-2) 0 3px, var(--color-loza) 3px 6px)"
+              />
+              No disponible
+            </span>
+            <span class="flex items-center gap-2">
+              <span class="h-3.5 w-0.75 rounded-sm bg-poste" />
+              Ahora
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  </section>
+
+  <!-- Precios, como la tabla de la pared -->
+  <section id="precios" class="scroll-mt-20 border-y border-junta bg-loza">
+    <div class="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 md:grid-cols-[1fr_2fr] md:py-24">
+      <div>
+        <h2 class="text-4xl sm:text-5xl">Precios</h2>
+        <p class="mt-4 max-w-xs text-botella-2">
+          El precio que ves es el que pagas. La duración es aproximada y ya
+          incluye lavado.
+        </p>
+      </div>
+      <ul class="divide-y divide-junta border-y border-junta">
+        {services.map((s) => (
+          <li>
+            <a href={`/agendar?service=${s.id}`} class="group block py-5">
+              <div class="flex items-baseline gap-3">
+                <span class="text-xl font-semibold group-hover:underline group-hover:decoration-poste group-hover:decoration-2 group-hover:underline-offset-4">
+                  {s.name}
+                </span>
+                <span
+                  class="mb-1.5 flex-1 border-b-2 border-dotted border-junta"
+                  aria-hidden="true"
+                />
+                <span class="font-display text-xl tabular-nums">
+                  {formatPrice(s.priceCents)}
+                </span>
+              </div>
+              <div class="mt-1 flex justify-between gap-4 text-sm text-cromo">
+                <span>{s.description}</span>
+                <span class="shrink-0 tabular-nums">{s.durationMin} min</span>
+              </div>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <!-- Equipo -->
+  <section class="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 md:grid-cols-[1fr_2fr] md:py-24">
+    <div>
+      <h2 class="text-4xl sm:text-5xl">Quién te atiende</h2>
+      <p class="mt-4 max-w-xs text-botella-2">
+        Si ya tienes barbero de confianza, resérvale directamente.
+      </p>
+    </div>
+    <ul class="grid gap-x-8 gap-y-10 sm:grid-cols-2">
+      {barbers.map((b) => (
+        <li class="flex gap-4">
+          {b.photoUrl ? (
+            <img
+              src={b.photoUrl}
+              alt=""
+              class="h-20 w-20 shrink-0 rounded object-cover"
+            />
+          ) : (
+            <span class="flex h-20 w-20 shrink-0 items-center justify-center rounded bg-botella font-display text-3xl text-loza">
+              {initials(b.name)}
+            </span>
+          )}
+          <div>
+            <h3 class="text-2xl">{b.name}</h3>
+            {b.bio && <p class="mt-1 text-botella-2">{b.bio}</p>}
+            <a href={`/agendar?barber=${b.id}`} class="link mt-3 inline-block">
+              Reservar con {firstName(b.name)}
+            </a>
+          </div>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <!-- Horario y ubicación -->
+  <section class="border-t border-junta bg-loza">
+    <div class="mx-auto grid max-w-6xl gap-12 px-4 py-16 sm:px-6 md:grid-cols-[1fr_2fr] md:py-24">
+      <div>
+        <h2 class="text-4xl sm:text-5xl">Horario</h2>
+        {settings.address && (
+          <p class="mt-4 text-botella-2">{settings.address}</p>
+        )}
+        {settings.phone && (
+          <a
+            href={`tel:${settings.phone.replace(/\s/g, "")}`}
+            class="link mt-1 inline-block"
+          >
+            {settings.phone}
+          </a>
+        )}
+      </div>
+      <div class="grid gap-10 sm:grid-cols-2">
+        <dl class="divide-y divide-junta border-y border-junta">
+          {schedule.map((s) => (
+            <div
+              class:list={[
+                "flex justify-between py-3",
+                s.isToday && "font-semibold",
+              ]}
+            >
+              <dt>
+                {s.day}
+                {s.isToday && (
+                  <span class="ml-2 text-sm font-normal text-poste">hoy</span>
+                )}
+              </dt>
+              <dd class:list={[s.text === "Cerrado" && "text-cromo"]}>
+                {s.text}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <div class="flex flex-col justify-between gap-6 rounded-lg bg-botella p-6 text-loza">
+          <p class="font-display text-3xl leading-tight">
+            ¿Ya sabes qué te vas a hacer?
+          </p>
+          <div>
+            <p class="text-azulejo/80">
+              Reserva en menos de un minuto y te esperamos en la silla.
+            </p>
+            <a href="/agendar" class="btn-primary mt-4">
+              Reservar cita
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 </Layout>

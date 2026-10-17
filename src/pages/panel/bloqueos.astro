@@ -1,0 +1,136 @@
+---
+import { actions } from "astro:actions";
+import { and, asc, gt, inArray } from "drizzle-orm";
+import PanelLayout from "@/layouts/PanelLayout.astro";
+import ActionAlert from "@/components/ActionAlert.astro";
+import { db } from "@/db";
+import { timeOff } from "@/db/schema";
+import { scopedBarbers } from "@/lib/panel";
+import { fmt, todayStr } from "@/lib/time";
+
+const { barbers } = await scopedBarbers(Astro.locals, Astro.url);
+const isAdmin = Astro.locals.user!.role === "admin";
+const ids = barbers.map((b) => b.id);
+const rows = ids.length
+  ? await db
+      .select()
+      .from(timeOff)
+      .where(
+        and(inArray(timeOff.barberId, ids), gt(timeOff.endsAt, new Date())),
+      )
+      .orderBy(asc(timeOff.startsAt))
+  : [];
+const nameOf = (id: string) => barbers.find((b) => b.id === id)?.name ?? "";
+const today = todayStr();
+
+const describe = (r: (typeof rows)[number]) => {
+  const sameDay =
+    fmt(r.startsAt, "yyyy-MM-dd") ===
+    fmt(new Date(r.endsAt.getTime() - 1), "yyyy-MM-dd");
+  const allDay =
+    fmt(r.startsAt, "HH:mm") === "00:00" && fmt(r.endsAt, "HH:mm") === "00:00";
+  if (sameDay && allDay)
+    return fmt(r.startsAt, "EEEE d 'de' MMMM") + ", todo el día";
+  if (sameDay)
+    return `${fmt(r.startsAt, "EEEE d 'de' MMMM")}, de ${fmt(r.startsAt, "HH:mm")} a ${fmt(r.endsAt, "HH:mm")}`;
+  if (allDay)
+    return `Del ${fmt(r.startsAt, "d 'de' MMMM")} al ${fmt(new Date(r.endsAt.getTime() - 1), "d 'de' MMMM")}`;
+  return `Del ${fmt(r.startsAt, "d 'de' MMMM, HH:mm")} al ${fmt(r.endsAt, "d 'de' MMMM, HH:mm")}`;
+};
+---
+
+<PanelLayout title="Bloqueos y días libres">
+  <ActionAlert actions={[actions.timeOff.create, actions.timeOff.delete]} />
+
+  <div class="grid gap-6 lg:grid-cols-[380px_1fr]">
+    <form
+      method="POST"
+      action={actions.timeOff.create}
+      class="card space-y-4 p-5 lg:self-start"
+    >
+      <h2 class="text-xl">Nuevo bloqueo</h2>
+      <div>
+        <label class="label">Barbero</label>
+        <select class="input" name="barberId" required>
+          {barbers.map((b) => (
+            <option value={b.id}>{b.name}</option>
+          ))}
+          {isAdmin && barbers.length > 1 && (
+            <option value="all">Todos (festivo / cierre)</option>
+          )}
+        </select>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="label">Desde</label>
+          <input
+            class="input"
+            type="date"
+            name="startDate"
+            min={today}
+            value={today}
+            required
+          />
+        </div>
+        <div>
+          <label class="label">Hasta</label>
+          <input
+            class="input"
+            type="date"
+            name="endDate"
+            min={today}
+            value={today}
+            required
+          />
+        </div>
+        <div>
+          <label class="label">Hora inicio</label>
+          <input class="input" type="time" name="startTime" />
+        </div>
+        <div>
+          <label class="label">Hora fin</label>
+          <input class="input" type="time" name="endTime" />
+        </div>
+      </div>
+      <p class="text-xs text-cromo">
+        Sin horas = días completos (vacaciones, día libre). Con horas = bloquear
+        un rango (cita médica, almuerzo largo).
+      </p>
+      <div>
+        <label class="label">
+          Motivo <span class="font-normal text-cromo">(interno)</span>
+        </label>
+        <input class="input" name="reason" placeholder="Vacaciones, festivo…" />
+      </div>
+      <button class="btn-primary w-full">Bloquear</button>
+      <p class="text-xs text-cromo">
+        Las citas ya agendadas en ese rango no se cancelan automáticamente:
+        revísalas en la agenda.
+      </p>
+    </form>
+
+    <section class="card">
+      <h2 class="border-b border-junta px-5 py-3 text-xl">Próximos bloqueos</h2>
+      <ul class="divide-y divide-junta text-sm">
+        {rows.map((r) => (
+          <li class="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+            <div>
+              <p class="font-medium">{nameOf(r.barberId)}</p>
+              <p class="text-cromo first-letter:uppercase">{describe(r)}</p>
+              {r.reason && <p class="text-cromo">{r.reason}</p>}
+            </div>
+            <form method="POST" action={actions.timeOff.delete}>
+              <input type="hidden" name="id" value={r.id} />
+              <button class="btn-danger btn-sm">Quitar</button>
+            </form>
+          </li>
+        ))}
+        {rows.length === 0 && (
+          <li class="px-5 py-10 text-center text-cromo">
+            No hay bloqueos próximos.
+          </li>
+        )}
+      </ul>
+    </section>
+  </div>
+</PanelLayout>

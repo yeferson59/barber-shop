@@ -1,0 +1,109 @@
+---
+/**
+ * Una fila de la pared de azulejos: el día de un barbero en bloques de 30 min.
+ * Libre = azulejo blanco, ocupado = verde botella, no disponible = rayado, cerrado = junta.
+ */
+import type { Tile } from "@/lib/live";
+import { minutesToHHMM } from "@/lib/time";
+
+interface Props {
+  tiles: Tile[];
+  /** Minuto actual si la fila es de hoy (dibuja la línea roja). */
+  nowMin?: number | null;
+  size?: "md" | "lg";
+  animate?: boolean;
+}
+const { tiles, nowMin = null, size = "md", animate = false } = Astro.props;
+const open = tiles[0]?.start ?? 0;
+const close = tiles.at(-1)?.end ?? 0;
+const nowPct =
+  nowMin !== null && nowMin > open && nowMin < close
+    ? ((nowMin - open) / (close - open)) * 100
+    : null;
+
+const label = {
+  free: "libre",
+  busy: "ocupado",
+  off: "no disponible",
+  closed: "cerrado",
+};
+---
+
+<div
+  class:list={[
+    "tile-row",
+    size === "lg" ? "h-9 sm:h-11" : "h-6 sm:h-7",
+    animate && "tile-row--animate",
+  ]}
+>
+  {tiles.map((t, i) => (
+    <span
+      class:list={["tile", `tile--${t.state}`, t.past && "tile--past"]}
+      style={animate ? { animationDelay: `${i * 22}ms` } : undefined}
+      title={`${minutesToHHMM(t.start)}–${minutesToHHMM(t.end)}: ${label[t.state]}`}
+    />
+  ))}
+  {nowPct !== null && (
+    <span class="tile-now" style={{ left: `${nowPct}%` }} aria-hidden="true" />
+  )}
+</div>
+
+<style>
+  .tile-row {
+    position: relative;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 2px;
+  }
+  .tile {
+    border-radius: 2px;
+    border: 1px solid var(--color-junta);
+    background: var(--color-loza);
+  }
+  .tile--busy {
+    background: var(--color-botella);
+    border-color: var(--color-botella);
+  }
+  .tile--off {
+    border-color: var(--color-junta);
+    background: repeating-linear-gradient(
+      135deg,
+      var(--color-azulejo-2) 0 3px,
+      var(--color-loza) 3px 6px
+    );
+  }
+  .tile--closed {
+    border-color: transparent;
+    background: transparent;
+    background-image: linear-gradient(var(--color-junta), var(--color-junta));
+    background-size: 100% 2px;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+  .tile--past {
+    opacity: 0.5;
+  }
+  .tile-now {
+    position: absolute;
+    top: -6px;
+    bottom: -6px;
+    width: 3px;
+    margin-left: -1.5px;
+    border-radius: 2px;
+    background: var(--color-poste);
+    box-shadow: 0 0 0 2px var(--color-loza);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .tile-row--animate .tile--busy {
+      animation: fill 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    }
+    @keyframes fill {
+      from {
+        background: var(--color-loza);
+        border-color: var(--color-junta);
+      }
+    }
+  }
+</style>

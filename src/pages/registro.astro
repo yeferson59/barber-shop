@@ -1,0 +1,118 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import AuthCard from "@/components/AuthCard.astro";
+
+if (Astro.locals.user)
+  return Astro.redirect(Astro.url.searchParams.get("next") ?? "/");
+
+const next = Astro.url.searchParams.get("next") ?? "";
+---
+
+<Layout title="Crear cuenta">
+  <AuthCard
+    title="Crea tu cuenta"
+    subtitle="La necesitas una sola vez. Luego reservas en segundos."
+  >
+    <form id="signup-form" class="space-y-4" data-next={next}>
+      <div>
+        <label class="label" for="name">
+          Nombre
+        </label>
+        <input
+          class="input"
+          id="name"
+          name="name"
+          autocomplete="name"
+          required
+        />
+      </div>
+      <div>
+        <label class="label" for="email">
+          Correo
+        </label>
+        <input
+          class="input"
+          id="email"
+          name="email"
+          type="email"
+          autocomplete="email"
+          required
+        />
+      </div>
+      <div>
+        <label class="label" for="phone">
+          WhatsApp{" "}
+          <span class="font-normal text-cromo">
+            (opcional, por si necesitamos avisarte)
+          </span>
+        </label>
+        <input
+          class="input"
+          id="phone"
+          name="phone"
+          type="tel"
+          autocomplete="tel"
+        />
+      </div>
+      <div>
+        <label class="label" for="password">
+          Contraseña
+        </label>
+        <input
+          class="input"
+          id="password"
+          name="password"
+          type="password"
+          minlength="8"
+          autocomplete="new-password"
+          required
+        />
+        <p class="mt-1.5 text-sm text-cromo">Mínimo 8 caracteres.</p>
+      </div>
+      <p class="alert-error hidden" data-error></p>
+      <button class="btn-primary w-full py-3.5 text-base" type="submit">
+        Crear cuenta
+      </button>
+    </form>
+    <p class="mt-6 text-botella-2">
+      ¿Ya tienes cuenta?{" "}
+      <a
+        class="link"
+        href={`/login${next ? `?next=${encodeURIComponent(next)}` : ""}`}
+      >
+        Entrar
+      </a>
+    </p>
+  </AuthCard>
+</Layout>
+
+<script>
+  import { authClient } from "../lib/auth-client";
+
+  const form = document.querySelector<HTMLFormElement>("#signup-form")!;
+  const error = form.querySelector<HTMLElement>("[data-error]")!;
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = form.querySelector("button")!;
+    btn.disabled = true;
+    error.classList.add("hidden");
+    const data = new FormData(form);
+    const { error: err } = await authClient.signUp.email({
+      name: String(data.get("name")),
+      email: String(data.get("email")),
+      password: String(data.get("password")),
+      phone: String(data.get("phone") ?? "") || undefined,
+    } as Parameters<typeof authClient.signUp.email>[0]);
+    if (err) {
+      error.textContent =
+        err.code === "USER_ALREADY_EXISTS" ||
+        err.code === "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL"
+          ? "Ese correo ya tiene cuenta. Entra con él o usa otro."
+          : (err.message ?? "No se pudo crear la cuenta.");
+      error.classList.remove("hidden");
+      btn.disabled = false;
+      return;
+    }
+    window.location.href = form.dataset.next || "/";
+  });
+</script>

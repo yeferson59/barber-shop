@@ -1,0 +1,16 @@
+---
+import type { ActionClient } from "astro:actions";
+
+interface Props {
+  actions: ActionClient<any, any, any>[];
+  success?: string;
+}
+const { actions, success = "Cambios guardados." } = Astro.props;
+
+const results = actions.map((a) => Astro.getActionResult(a)).filter(Boolean);
+const error = results.find((r) => r?.error)?.error;
+const ok = results.some((r) => r?.data);
+---
+
+{error && <p class="alert-error mb-4">{error.message}</p>}
+{!error && ok && <p class="alert-ok mb-4">{success}</p>}

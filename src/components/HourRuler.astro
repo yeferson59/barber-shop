@@ -1,0 +1,27 @@
+---
+/** Marcas de hora alineadas con TileRow. */
+interface Props {
+  open: number;
+  close: number;
+  every?: number;
+}
+const { open, close, every = 180 } = Astro.props;
+const marks: number[] = [];
+for (let m = Math.ceil(open / every) * every; m <= close; m += every) marks.push(m);
+if (marks[0] !== open) marks.unshift(open);
+const pct = (m: number) => ((m - open) / (close - open)) * 100;
+---
+
+<div class="relative h-5 text-xs text-cromo tabular-nums" aria-hidden="true">
+  {
+    marks.map((m) => (
+      <span
+        class="absolute top-0"
+        style={{ left: `${pct(m)}%`, transform: m === close ? "translateX(-100%)" : m === open ? "none" : "translateX(-50%)" }}
+      >
+        {Math.floor(m / 60)}
+        {m % 60 ? `:${String(m % 60).padStart(2, "0")}` : ""}
+      </span>
+    ))
+  }
+</div>

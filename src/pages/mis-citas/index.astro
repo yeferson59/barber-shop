@@ -1,0 +1,226 @@
+---
+import { actions } from "astro:actions";
+import { desc, eq } from "drizzle-orm";
+import Layout from "@/layouts/Layout.astro";
+import StatusBadge from "@/components/StatusBadge.astro";
+import { db } from "@/db";
+import { appointment } from "@/db/schema";
+import { getSettings } from "@/lib/settings";
+import { fmt, fmtTime, formatPrice, ucfirst } from "@/lib/time";
+
+const user = Astro.locals.user!;
+const cancelResult = Astro.getActionResult(actions.booking.cancel);
+
+const [settings, rows] = await Promise.all([
+  getSettings(),
+  db.query.appointment.findMany({
+    where: eq(appointment.clientId, user.id),
+    with: { service: true, barber: true },
+    orderBy: desc(appointment.startsAt),
+  }),
+]);
+
+const now = Date.now();
+const upcoming = rows
+  .filter((a) => a.status === "confirmed" && a.endsAt.getTime() > now)
+  .reverse();
+const past = rows.filter((a) => !upcoming.includes(a));
+const [nextAppt, ...later] = upcoming;
+const canChange = (a: (typeof rows)[number]) =>
+  a.startsAt.getTime() - settings.cancelLimitHours * 3_600_000 > now;
+
+const ok = Astro.url.searchParams.get("ok");
+const okMessage =
+  ok === "nueva"
+    ? "Cita reservada. Te esperamos."
+    : ok === "reprogramada"
+      ? "Cita cambiada. Ya tienes la nueva hora."
+      : null;
+const phoneHref = settings.phone
+  ? `tel:${settings.phone.replace(/\s/g, "")}`
+  : null;
+---
+
+<Layout title="Mis citas">
+  <div class="mx-auto max-w-4xl px-4 py-12 sm:px-6 sm:py-16">
+    <div class="flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <h1 class="text-5xl sm:text-6xl">Mis citas</h1>
+        <p class="mt-3 text-lg text-botella-2">
+          Hola, {user.name.split(" ")[0]}.
+        </p>
+      </div>
+      <a href="/agendar" class="btn-primary">
+        Reservar otra cita
+      </a>
+    </div>
+
+    <div class="mt-8 space-y-3 empty:hidden">
+      {okMessage && <p class="alert-ok">{okMessage}</p>}
+      {cancelResult?.error && (
+        <p class="alert-error">{cancelResult.error.message}</p>
+      )}
+      {cancelResult?.data && (
+        <p class="alert-ok">
+          Cita cancelada. La hora quedó libre para otra persona.
+        </p>
+      )}
+    </div>
+
+    {!nextAppt ? (
+      <div class="mt-10 rounded-xl border border-dashed border-junta px-6 py-12 text-center">
+        <p class="font-display text-2xl">No tienes citas próximas</p>
+        <p class="mt-2 text-botella-2">
+          Elige servicio, barbero y hora; tarda menos de un minuto.
+        </p>
+        <a href="/agendar" class="btn-primary mt-6">
+          Reservar cita
+        </a>
+      </div>
+    ) : (
+      <section class="mt-10" aria-label="Próxima cita">
+        <div class="grid overflow-hidden rounded-xl border border-junta bg-loza sm:grid-cols-[13rem_1fr]">
+          <div class="bg-botella p-6 text-loza">
+            <p class="text-azulejo/75">Tu próxima cita</p>
+            <p class="mt-3 font-display text-5xl leading-none">
+              {fmtTime(nextAppt.startsAt)}
+            </p>
+            <p class="mt-2 text-lg">
+              {ucfirst(fmt(nextAppt.startsAt, "EEEE d 'de' MMMM"))}
+            </p>
+          </div>
+          <div class="flex flex-col justify-between gap-6 p-6">
+            <div>
+              <p class="text-2xl font-semibold">{nextAppt.service.name}</p>
+              <p class="mt-1 text-botella-2">
+                Con {nextAppt.barber.name}. Termina hacia las{" "}
+                {fmtTime(nextAppt.endsAt)}. {formatPrice(nextAppt.priceCents)},
+                se paga en la barbería.
+              </p>
+              {settings.address && (
+                <p class="mt-1 text-sm text-cromo">{settings.address}</p>
+              )}
+            </div>
+            {canChange(nextAppt) ? (
+              <div class="flex flex-wrap gap-2">
+                <a
+                  href={`/mis-citas/${nextAppt.id}/reprogramar`}
+                  class="btn-ghost"
+                >
+                  Cambiar día u hora
+                </a>
+                <form
+                  method="POST"
+                  action={actions.booking.cancel}
+                  data-confirm="¿Cancelar esta cita? La hora quedará libre para otra persona."
+                >
+                  <input type="hidden" name="id" value={nextAppt.id} />
+                  <button class="btn-danger">Cancelar cita</button>
+                </form>
+              </div>
+            ) : (
+              <p class="text-sm text-cromo">
+                Faltan menos de {settings.cancelLimitHours} h. Para cambiarla,
+                llámanos
+                {phoneHref && (
+                  <a class="link" href={phoneHref}>
+                    {settings.phone}
+                  </a>
+                )}
+                .
+              </p>
+            )}
+          </div>
+        </div>
+
+        {later.length > 0 && (
+          <ul class="mt-4 divide-y divide-junta rounded-xl border border-junta bg-loza">
+            {later.map((a) => (
+              <li class="flex flex-wrap items-center gap-x-6 gap-y-3 px-5 py-4">
+                <p class="shrink-0 sm:w-40">
+                  <span class="block font-display text-xl">
+                    {fmtTime(a.startsAt)}
+                  </span>
+                  <span class="text-sm text-cromo">
+                    {ucfirst(fmt(a.startsAt, "EEE d 'de' MMM"))}
+                  </span>
+                </p>
+                <p class="min-w-0 flex-1">
+                  <span class="block font-semibold">{a.service.name}</span>
+                  <span class="text-sm text-botella-2">
+                    Con {a.barber.name}
+                  </span>
+                </p>
+                {canChange(a) && (
+                  <div class="flex gap-2">
+                    <a
+                      href={`/mis-citas/${a.id}/reprogramar`}
+                      class="btn-ghost btn-sm"
+                    >
+                      Cambiar
+                    </a>
+                    <form
+                      method="POST"
+                      action={actions.booking.cancel}
+                      data-confirm="¿Cancelar esta cita?"
+                    >
+                      <input type="hidden" name="id" value={a.id} />
+                      <button class="btn btn-sm text-poste-2 hover:underline">
+                        Cancelar
+                      </button>
+                    </form>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        <p class="mt-4 text-sm text-cromo">
+          Puedes cambiar o cancelar hasta {settings.cancelLimitHours} h antes.
+        </p>
+      </section>
+    )}
+
+    {past.length > 0 && (
+      <section class="mt-16">
+        <h2 class="text-3xl">Historial</h2>
+        <ul class="mt-5 divide-y divide-junta border-y border-junta">
+          {past.map((a) => (
+            <li class="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3">
+              <div>
+                <p class="font-semibold">
+                  {a.service.name}{" "}
+                  <span class="font-normal text-botella-2">
+                    con {a.barber.name}
+                  </span>
+                </p>
+                <p class="text-sm text-cromo">
+                  {ucfirst(fmt(a.startsAt, "d 'de' MMMM 'de' yyyy"))}
+                </p>
+              </div>
+              <div class="flex items-center gap-4">
+                <StatusBadge status={a.status} />
+                <a
+                  href={`/agendar?service=${a.serviceId}&barber=${a.barberId}`}
+                  class="link text-sm"
+                >
+                  Reservar igual
+                </a>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )}
+  </div>
+</Layout>
+
+<script>
+  document
+    .querySelectorAll<HTMLFormElement>("form[data-confirm]")
+    .forEach((f) =>
+      f.addEventListener("submit", (e) => {
+        if (!confirm(f.dataset.confirm)) e.preventDefault();
+      }),
+    );
+</script>

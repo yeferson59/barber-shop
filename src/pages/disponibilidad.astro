@@ -1,0 +1,244 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import TileRow from "@/components/TileRow.astro";
+import HourRuler from "@/components/HourRuler.astro";
+import { getOccupancy } from "@/lib/availability";
+import { dayRangeOf, freeMinutesLeft, toTiles } from "@/lib/live";
+import { getSettings } from "@/lib/settings";
+import {
+  addDaysStr,
+  fmtDateStr,
+  isDateStr,
+  minutesOfDay,
+  todayStr,
+  ucfirst,
+} from "@/lib/time";
+
+const settings = await getSettings();
+const today = todayStr();
+const nowMin = minutesOfDay(new Date());
+const lastDay = addDaysStr(today, settings.maxDaysAhead);
+const requested = Astro.url.searchParams.get("desde") ?? today;
+const from =
+  isDateStr(requested) && requested >= today && requested <= lastDay
+    ? requested
+    : today;
+
+const occupancy = await getOccupancy(from, 7);
+const range = dayRangeOf(occupancy);
+const dates = Array.from({ length: 7 }, (_, i) => addDaysStr(from, i));
+const prev =
+  from > today
+    ? addDaysStr(from, -7) >= today
+      ? addDaysStr(from, -7)
+      : today
+    : null;
+const next = addDaysStr(from, 7) <= lastDay ? addDaysStr(from, 7) : null;
+
+const walls = occupancy.map((b) => ({
+  ...b,
+  rows: b.days.map((d) => {
+    const tiles = toTiles(d, range, d.date === today ? nowMin : null);
+    return {
+      date: d.date,
+      tiles,
+      free: freeMinutesLeft(tiles),
+      works: d.hours.length > 0,
+    };
+  }),
+}));
+
+// El día con más huecos entre todo el equipo
+const freeByDate = dates.map((date, i) => ({
+  date,
+  free: walls.reduce((n, w) => n + w.rows[i].free, 0),
+}));
+const calmest = [...freeByDate].sort((a, b) => b.free - a.free)[0];
+
+const hours = (min: number) => {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m ? `${h} h ${m}` : `${h} h`;
+};
+const dayLabel = (date: string) =>
+  date === today
+    ? "Hoy"
+    : date === addDaysStr(today, 1)
+      ? "Mañana"
+      : ucfirst(fmtDateStr(date, "EEE d"));
+const sameMonth = fmtDateStr(dates[0], "M") === fmtDateStr(dates[6], "M");
+const weekRange = sameMonth
+  ? `Del ${fmtDateStr(dates[0], "d")} al ${fmtDateStr(dates[6], "d 'de' MMMM")}`
+  : `Del ${fmtDateStr(dates[0], "d 'de' MMMM")} al ${fmtDateStr(dates[6], "d 'de' MMMM")}`;
+const calmestLabel = !calmest
+  ? ""
+  : calmest.date === today
+    ? "hoy"
+    : calmest.date === addDaysStr(today, 1)
+      ? "mañana"
+      : `el ${fmtDateStr(calmest.date, "EEEE d")}`;
+const initials = (name: string) =>
+  name
+    .split(" ")
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join("");
+---
+
+<Layout
+  title="Disponibilidad"
+  description="Qué tan ocupada está la barbería esta semana, por barbero y por día."
+>
+  <div class="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
+    <div class="grid gap-6 md:grid-cols-[1fr_auto] md:items-end">
+      <div class="max-w-2xl">
+        <h1 class="text-5xl sm:text-6xl">La semana</h1>
+        <p class="mt-4 text-lg text-botella-2">
+          Cada fila es un día y cada cuadro, media hora. Toca un día para ver
+          las horas exactas y reservar.
+        </p>
+      </div>
+      <nav class="flex items-center gap-2" aria-label="Cambiar de semana">
+        {prev ? (
+          <a
+            class="btn-ghost"
+            href={prev === today ? "/disponibilidad" : `?desde=${prev}`}
+          >
+            Semana anterior
+          </a>
+        ) : null}
+        {next ? (
+          <a class="btn-ghost" href={`?desde=${next}`}>
+            Semana siguiente
+          </a>
+        ) : null}
+      </nav>
+    </div>
+
+    <div class="mt-8 flex flex-wrap items-center justify-between gap-4 border-y border-junta py-4">
+      <p class="text-botella-2">
+        {weekRange}.
+        {calmest && calmest.free > 0 && (
+          <>
+            {" "}
+            El día con más huecos es{" "}
+            <a href={`/agendar?date=${calmest.date}`} class="link">
+              {calmestLabel}
+            </a>
+            , con {hours(calmest.free)} libres entre todo el equipo.
+          </>
+        )}
+      </p>
+      <div class="flex flex-wrap gap-x-5 gap-y-2 text-sm text-cromo">
+        <span class="flex items-center gap-2">
+          <span class="h-3.5 w-3.5 rounded-sm border border-junta bg-loza" />
+          Libre
+        </span>
+        <span class="flex items-center gap-2">
+          <span class="h-3.5 w-3.5 rounded-sm bg-botella" />
+          Ocupado
+        </span>
+        <span class="flex items-center gap-2">
+          <span
+            class="h-3.5 w-3.5 rounded-sm border border-junta"
+            style="background: repeating-linear-gradient(135deg, var(--color-azulejo-2) 0 3px, var(--color-loza) 3px 6px)"
+          />
+          No disponible
+        </span>
+        <span class="flex items-center gap-2">
+          <span class="h-3.5 w-0.75 rounded-sm bg-poste" />
+          Ahora
+        </span>
+      </div>
+    </div>
+
+    <div class="mt-10 space-y-10">
+      {walls.map((w) => (
+        <section
+          class="rounded-xl border border-junta bg-loza p-4 sm:p-6"
+          aria-labelledby={`b-${w.barberId}`}
+        >
+          <header class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <span class="flex h-11 w-11 items-center justify-center rounded bg-botella font-display text-lg text-loza">
+                {initials(w.name)}
+              </span>
+              <h2 id={`b-${w.barberId}`} class="text-2xl sm:text-3xl">
+                {w.name}
+              </h2>
+            </div>
+            <a href={`/agendar?barber=${w.barberId}`} class="link">
+              Reservar con {w.name.split(" ")[0]}
+            </a>
+          </header>
+
+          <div class="mt-6 grid grid-cols-[4.5rem_1fr] gap-x-3 sm:grid-cols-[6.5rem_1fr_5.5rem] sm:gap-x-5">
+            <span />
+            <HourRuler open={range.open} close={range.close} />
+            <span class="hidden text-right text-xs text-cromo sm:block">
+              Libre
+            </span>
+            {w.rows.map((r) => {
+              const label = !r.works
+                ? "No trabaja"
+                : r.free === 0
+                  ? "Lleno"
+                  : hours(r.free);
+              const row = (
+                <>
+                  <span class="py-1.5 text-sm leading-tight">
+                    <span
+                      class:list={[
+                        "block",
+                        r.date === today && "font-semibold",
+                      ]}
+                    >
+                      {dayLabel(r.date)}
+                    </span>
+                    <span class="block text-xs text-cromo sm:hidden">
+                      {label}
+                    </span>
+                  </span>
+                  <span class="py-1.5">
+                    <TileRow
+                      tiles={r.tiles}
+                      nowMin={r.date === today ? nowMin : null}
+                    />
+                  </span>
+                  <span
+                    class:list={[
+                      "hidden py-1.5 text-right text-sm sm:block",
+                      r.free === 0 ? "text-cromo" : "font-semibold",
+                    ]}
+                  >
+                    {label}
+                  </span>
+                </>
+              );
+              return r.works && r.free > 0 ? (
+                <a
+                  href={`/agendar?barber=${w.barberId}&date=${r.date}`}
+                  class="col-span-full -mx-2 grid grid-cols-subgrid items-center rounded-md px-2 hover:bg-azulejo"
+                  aria-label={`${dayLabel(r.date)} con ${w.name}: ${label} libres. Reservar`}
+                >
+                  {row}
+                </a>
+              ) : (
+                <div class="col-span-full -mx-2 grid grid-cols-subgrid items-center px-2">
+                  {row}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+    </div>
+  </div>
+</Layout>
+
+<script>
+  // Mantiene la pared al día mientras la pestaña está a la vista
+  setInterval(() => {
+    if (document.visibilityState === "visible") window.location.reload();
+  }, 120_000);
+</script>

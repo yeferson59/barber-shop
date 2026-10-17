@@ -1,0 +1,17 @@
+---
+import type { AppointmentStatus } from "@/db/schema";
+
+interface Props {
+  status: AppointmentStatus;
+}
+const { status } = Astro.props;
+const map: Record<AppointmentStatus, [string, string]> = {
+  confirmed: ["Confirmada", "bg-botella text-loza"],
+  completed: ["Completada", "bg-azulejo text-botella-2"],
+  cancelled: ["Cancelada", "bg-poste/10 text-poste-2"],
+  no_show: ["No vino", "bg-junta text-botella"],
+};
+const [label, cls] = map[status];
+---
+
+<span class:list={["badge", cls]}>{label}</span>

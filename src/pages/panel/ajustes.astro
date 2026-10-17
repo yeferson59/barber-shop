@@ -1,0 +1,99 @@
+---
+import { actions } from "astro:actions";
+import PanelLayout from "@/layouts/PanelLayout.astro";
+import ActionAlert from "@/components/ActionAlert.astro";
+import { getSettings } from "@/lib/settings";
+import { SHOP_TZ } from "@/lib/time";
+
+const s = await getSettings();
+---
+
+<PanelLayout title="Ajustes">
+  <ActionAlert actions={[actions.settings.save]} />
+  <form
+    method="POST"
+    action={actions.settings.save}
+    class="card max-w-2xl space-y-6 p-6"
+  >
+    <section class="grid gap-4 sm:grid-cols-2">
+      <h2 class="text-xl sm:col-span-2">Barbería</h2>
+      <div class="sm:col-span-2">
+        <label class="label">Nombre</label>
+        <input class="input" name="name" value={s.name} required />
+      </div>
+      <div>
+        <label class="label">Dirección</label>
+        <input class="input" name="address" value={s.address ?? ""} />
+      </div>
+      <div>
+        <label class="label">Teléfono</label>
+        <input class="input" name="phone" value={s.phone ?? ""} />
+      </div>
+    </section>
+
+    <section class="grid gap-4 sm:grid-cols-2">
+      <h2 class="text-xl sm:col-span-2">Reservas</h2>
+      <div>
+        <label class="label">Intervalo entre horarios (min)</label>
+        <input
+          class="input"
+          type="number"
+          name="slotStepMin"
+          min="5"
+          max="120"
+          step="5"
+          value={s.slotStepMin}
+          required
+        />
+        <p class="mt-1 text-xs text-cromo">
+          Cada cuánto se ofrece una hora de inicio (9:00, 9:15…).
+        </p>
+      </div>
+      <div>
+        <label class="label">Antelación mínima (min)</label>
+        <input
+          class="input"
+          type="number"
+          name="minLeadMin"
+          min="0"
+          step="15"
+          value={s.minLeadMin}
+          required
+        />
+        <p class="mt-1 text-xs text-cromo">
+          No se puede reservar con menos tiempo que esto.
+        </p>
+      </div>
+      <div>
+        <label class="label">Días máximos de antelación</label>
+        <input
+          class="input"
+          type="number"
+          name="maxDaysAhead"
+          min="1"
+          max="365"
+          value={s.maxDaysAhead}
+          required
+        />
+      </div>
+      <div>
+        <label class="label">Límite para cancelar (horas)</label>
+        <input
+          class="input"
+          type="number"
+          name="cancelLimitHours"
+          min="0"
+          value={s.cancelLimitHours}
+          required
+        />
+        <p class="mt-1 text-xs text-cromo">
+          El cliente puede cancelar o reprogramar hasta este tiempo antes.
+        </p>
+      </div>
+    </section>
+    <p class="text-xs text-cromo">
+      Zona horaria: {SHOP_TZ} (variable SHOP_TIMEZONE).
+    </p>
+    <button class="btn-primary">Guardar ajustes</button>
+  </form>
+</PanelLayout>

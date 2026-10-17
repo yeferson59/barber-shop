@@ -1,0 +1,141 @@
+---
+import "@/styles/global.css";
+import Logo from "@/components/Logo.astro";
+import LogoutButton from "@/components/LogoutButton.astro";
+import { getSettings } from "@/lib/settings";
+
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+
+const user = Astro.locals.user!;
+const isAdmin = user.role === "admin";
+const settings = await getSettings();
+const path = Astro.url.pathname.replace(/\/$/, "") || "/panel";
+
+const nav = [
+  {
+    href: "/panel",
+    label: "Agenda",
+    icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
+  },
+  {
+    href: "/panel/clientes",
+    label: "Clientes",
+    icon: "M17 20h5v-2a3 3 0 00-5.36-1.86M17 20H7m10 0v-2c0-.66-.13-1.28-.36-1.86M7 20H2v-2a3 3 0 015.36-1.86M7 20v-2c0-.66.13-1.28.36-1.86m0 0a5 5 0 019.28 0M15 7a3 3 0 11-6 0 3 3 0 016 0z",
+  },
+  {
+    href: "/panel/horarios",
+    label: "Horarios",
+    icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
+  },
+  {
+    href: "/panel/bloqueos",
+    label: "Bloqueos",
+    icon: "M18.36 5.64A9 9 0 115.64 18.36 9 9 0 0118.36 5.64zM5.64 5.64l12.72 12.72",
+  },
+  ...(isAdmin
+    ? [
+        {
+          href: "/panel/estadisticas",
+          label: "Estadísticas",
+          icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
+        },
+        {
+          href: "/panel/servicios",
+          label: "Servicios",
+          icon: "M14.12 14.12L19 19m-7-7l7-7m-7 7l-2.88 2.88M12 12L9.12 9.12m0 5.76a3 3 0 10-4.24 4.24 3 3 0 004.24-4.24zm0-5.76a3 3 0 10-4.24-4.24 3 3 0 004.24 4.24z",
+        },
+        {
+          href: "/panel/barberos",
+          label: "Barberos",
+          icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z",
+        },
+        {
+          href: "/panel/ajustes",
+          label: "Ajustes",
+          icon: "M10.33 4.32c.43-1.76 2.92-1.76 3.35 0a1.72 1.72 0 002.57 1.06c1.54-.94 3.31.83 2.37 2.37a1.72 1.72 0 001.06 2.57c1.76.43 1.76 2.92 0 3.35a1.72 1.72 0 00-1.06 2.57c.94 1.54-.83 3.31-2.37 2.37a1.72 1.72 0 00-2.57 1.06c-.43 1.76-2.92 1.76-3.35 0a1.72 1.72 0 00-2.57-1.06c-1.54.94-3.31-.83-2.37-2.37a1.72 1.72 0 00-1.06-2.57c-1.76-.43-1.76-2.92 0-3.35a1.72 1.72 0 001.06-2.57c-.94-1.54.83-3.31 2.37-2.37.99.6 2.28.07 2.57-1.06zM15 12a3 3 0 11-6 0 3 3 0 016 0z",
+        },
+      ]
+    : []),
+];
+const isActive = (href: string) =>
+  href === "/panel" ? path === "/panel" : path.startsWith(href);
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400..800&family=Ultra&display=swap"
+      rel="stylesheet"
+    />
+    <title>{title} · Panel · {settings.name}</title>
+  </head>
+  <body class="min-h-screen bg-azulejo">
+    <div class="md:flex">
+      <aside class="bg-botella text-azulejo/80 md:sticky md:top-0 md:flex md:h-screen md:w-64 md:shrink-0 md:flex-col">
+        <a href="/" class="flex items-center gap-2.5 px-5 pt-5 pb-4 text-loza">
+          <Logo class="h-9 w-4.5 shrink-0 text-azulejo" />
+          <span class="font-display text-lg leading-tight">
+            {settings.name}
+          </span>
+        </a>
+        <nav class="flex gap-1 overflow-x-auto px-3 pb-3 text-[15px] md:flex-1 md:flex-col md:overflow-visible">
+          {nav.map((n) => (
+            <a
+              href={n.href}
+              aria-current={isActive(n.href) ? "page" : undefined}
+              class:list={[
+                "flex shrink-0 items-center gap-3 rounded-md px-3 py-2 transition-colors",
+                isActive(n.href)
+                  ? "bg-loza font-semibold text-botella"
+                  : "hover:bg-white/10 hover:text-loza",
+              ]}
+            >
+              <svg
+                class="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d={n.icon}
+                />
+              </svg>
+              {n.label}
+            </a>
+          ))}
+        </nav>
+        <div class="hidden border-t border-white/10 px-5 py-4 text-sm md:block">
+          <p class="truncate font-semibold text-loza">{user.name}</p>
+          <p class="text-azulejo/60">{isAdmin ? "Administrador" : "Barbero"}</p>
+          <div class="mt-3 flex gap-4">
+            <a href="/" class="hover:text-loza">
+              Ver la web
+            </a>
+            <LogoutButton class="hover:text-loza" />
+          </div>
+        </div>
+      </aside>
+      <main class="min-w-0 flex-1 px-4 py-6 sm:px-8 sm:py-10">
+        <div class="mb-8 flex flex-wrap items-end justify-between gap-4">
+          <h1 class="text-4xl sm:text-5xl">{title}</h1>
+          <slot name="actions" />
+        </div>
+        <slot />
+      </main>
+    </div>
+  </body>
+</html>

@@ -18,8 +18,8 @@
     "start": "node --env-file=.env dist/server/entry.mjs"
   },
   "dependencies": {
-    "@astrojs/node": "11.1.8",
     "@astrojs/react": "7.1.0",
+    "@astrojs/vercel": "^11.0.15",
     "@date-fns/tz": "1.5.0",
     "@libsql/client": "0.18.0",
     "@tailwindcss/vite": "4.3.3",

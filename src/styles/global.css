@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+/*
+ * La Navaja — "la pared de azulejos"
+ * Azulejo menta, verde botella, cromo y el rojo del poste.
+ */
+@theme {
+  --font-sans: "Schibsted Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Ultra", "Rockwell", Georgia, serif;
+
+  --color-azulejo: #e3ece6;
+  --color-azulejo-2: #d3e1d8;
+  --color-loza: #f8fbf9;
+  --color-botella: #0f2e26;
+  --color-botella-2: #24443a;
+  --color-cromo: #56685f;
+  --color-junta: #c3d2ca;
+  --color-poste: #c42b2b;
+  --color-poste-2: #a12121;
+
+  /* Compatibilidad con clases existentes */
+  --color-ink: #0f2e26;
+  --color-brand-50: #f8fbf9;
+  --color-brand-100: #e3ece6;
+  --color-brand-300: #e8a3a3;
+  --color-brand-400: #d45a5a;
+  --color-brand-500: #c42b2b;
+  --color-brand-600: #a12121;
+  --color-brand-700: #861b1b;
+  --color-brand-800: #6b1616;
+
+  --text-hero: clamp(2.75rem, 7vw, 5.25rem);
+  --text-hero--line-height: 0.98;
+}
+
+@layer base {
+  html {
+    @apply bg-azulejo font-sans text-botella antialiased;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-display font-normal;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-poste);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--color-botella);
+    color: var(--color-loza);
+  }
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-[15px] leading-none font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+}
+@utility btn-primary {
+  @apply btn bg-poste text-white hover:bg-poste-2;
+}
+@utility btn-dark {
+  @apply btn bg-botella text-loza hover:bg-botella-2;
+}
+@utility btn-ghost {
+  @apply btn border border-junta bg-loza text-botella hover:border-botella;
+}
+@utility btn-danger {
+  @apply btn border border-poste/40 bg-loza text-poste-2 hover:bg-poste hover:text-white;
+}
+@utility btn-sm {
+  @apply px-3 py-1.5 text-[13px];
+}
+@utility card {
+  @apply rounded-lg border border-junta bg-loza;
+}
+@utility label {
+  @apply mb-1.5 block text-sm font-semibold text-botella;
+}
+@utility input {
+  @apply block w-full rounded-md border border-junta bg-loza px-3 py-2.5 text-[15px] text-botella placeholder:text-cromo/70 focus:border-botella focus:outline-none;
+}
+@utility badge {
+  @apply inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold;
+}
+@utility alert-error {
+  @apply rounded-md border-l-4 border-poste bg-loza px-4 py-3 text-sm text-poste-2;
+}
+@utility alert-ok {
+  @apply rounded-md border-l-4 border-botella bg-loza px-4 py-3 text-sm text-botella;
+}
+@utility link {
+  @apply font-semibold text-botella underline decoration-junta decoration-2 underline-offset-4 hover:decoration-poste;
+}
+
+/* Pared de azulejos: textura para fondos */
+@utility tile-wall {
+  background-color: var(--color-azulejo);
+  background-image:
+    linear-gradient(var(--color-junta) 2px, transparent 2px),
+    linear-gradient(90deg, var(--color-junta) 2px, transparent 2px);
+  background-size: 56px 56px;
+}

@@ -1,0 +1,85 @@
+---
+/** Gráfico de barras verticales de una sola serie, con tooltip al pasar el ratón. */
+interface Props {
+  data: { label: string; value: number; tooltip: string }[];
+  /** Mostrar etiqueta del eje X cada N barras. */
+  labelEvery?: number;
+  height?: number;
+  format?: (v: number) => string;
+}
+const { data, labelEvery = 1, height = 180, format = (v: number) => String(v) } = Astro.props;
+
+const max = Math.max(1, ...data.map((d) => d.value));
+// Escala "bonita" para el eje
+const step = 10 ** Math.floor(Math.log10(max));
+const top = Math.ceil(max / step) * step;
+const ticks = [0, top / 2, top];
+
+const W = 100; // unidades por barra (viewBox)
+const gap = 2;
+const width = data.length * W;
+const plotH = 1000;
+const r = 16; // radio superior
+
+// Con pocas barras, más aire entre ellas
+const fill = data.length < 10 ? 0.55 : 0.84;
+const barPath = (i: number, v: number) => {
+  const h = (v / top) * plotH;
+  if (h <= 0) return "";
+  const w = W * fill;
+  const x = i * W + (W - w) / 2;
+  const y = plotH - h;
+  const rr = Math.min(r, h, w / 2);
+  return `M${x},${plotH} V${y + rr} Q${x},${y} ${x + rr},${y} H${x + w - rr} Q${x + w},${y} ${x + w},${y + rr} V${plotH} Z`;
+};
+---
+
+<div class="bar-chart relative" style={{ "--h": `${height}px` }}>
+  <div class="flex gap-2">
+    <div class="flex h-(--h) flex-col justify-between py-0 text-right text-[11px] text-cromo">
+      {[...ticks].reverse().map((t) => <span class="-translate-y-1/2 first:translate-y-0 last:-translate-y-full">{format(t)}</span>)}
+    </div>
+    <div class="relative min-w-0 flex-1">
+      <svg viewBox={`0 0 ${width} ${plotH}`} preserveAspectRatio="none" class="block h-(--h) w-full overflow-visible" role="img">
+        {ticks.map((t) => (
+          <line x1="0" x2={width} y1={plotH - (t / top) * plotH} y2={plotH - (t / top) * plotH} stroke="var(--color-junta)" stroke-width="2" vector-effect="non-scaling-stroke" />
+        ))}
+        {data.map((d, i) => (
+          <g class="group" data-tip={d.tooltip}>
+            <rect x={i * W} y="0" width={W} height={plotH} fill="transparent" />
+            <path d={barPath(i, d.value)} class="fill-botella transition-colors group-hover:fill-poste" />
+          </g>
+        ))}
+      </svg>
+      <div class="relative mt-1 h-4 text-[11px] text-cromo">
+        {data.map((d, i) =>
+          i % labelEvery === 0 ? (
+            <span class="absolute -translate-x-1/2 whitespace-nowrap" style={{ left: `${((i + 0.5) / data.length) * 100}%` }}>
+              {d.label}
+            </span>
+          ) : null,
+        )}
+      </div>
+      <div class="chart-tip pointer-events-none absolute z-10 hidden rounded-md bg-ink px-2 py-1 text-xs whitespace-nowrap text-white shadow"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll<HTMLElement>(".bar-chart").forEach((chart) => {
+    const tip = chart.querySelector<HTMLElement>(".chart-tip")!;
+    const area = tip.parentElement!;
+    chart.querySelectorAll<SVGGElement>("[data-tip]").forEach((g) => {
+      g.addEventListener("mouseenter", () => {
+        tip.textContent = g.dataset.tip ?? "";
+        tip.classList.remove("hidden");
+      });
+      g.addEventListener("mousemove", (e) => {
+        const box = area.getBoundingClientRect();
+        tip.style.left = `${Math.min(e.clientX - box.left + 12, box.width - tip.offsetWidth)}px`;
+        tip.style.top = `${e.clientY - box.top - 32}px`;
+      });
+      g.addEventListener("mouseleave", () => tip.classList.add("hidden"));
+    });
+  });
+</script>

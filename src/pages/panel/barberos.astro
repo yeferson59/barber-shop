@@ -1,0 +1,118 @@
+---
+import { actions } from "astro:actions";
+import { asc, desc } from "drizzle-orm";
+import PanelLayout from "@/layouts/PanelLayout.astro";
+import ActionAlert from "@/components/ActionAlert.astro";
+import { db } from "@/db";
+import { barber, barberService, service, user } from "@/db/schema";
+
+const [barbers, services, links, users] = await Promise.all([
+  db.select().from(barber).orderBy(desc(barber.active), asc(barber.name)),
+  db.select().from(service).orderBy(asc(service.name)),
+  db.select().from(barberService),
+  db.select({ id: user.id, email: user.email }).from(user),
+]);
+const emailOf = (id: string | null) =>
+  users.find((u) => u.id === id)?.email ?? "";
+const offers = (b: string, s: string) =>
+  links.some((l) => l.barberId === b && l.serviceId === s);
+---
+
+<PanelLayout title="Barberos">
+  <ActionAlert actions={[actions.barbers.save]} />
+
+  {[...barbers, null].map((b) => (
+    <details
+      class:list={["card mb-3", b && !b.active && "opacity-60"]}
+      open={!b && barbers.length === 0}
+    >
+      <summary class="flex cursor-pointer items-center justify-between px-5 py-4">
+        <span class="font-semibold">
+          {b ? b.name : "+ Añadir barbero"}
+          {b && !b.active && (
+            <span class="badge ml-2 bg-junta text-botella-2">Inactivo</span>
+          )}
+        </span>
+        {b && (
+          <span class="text-sm text-cromo">
+            {emailOf(b.userId) || "Sin cuenta vinculada"}
+          </span>
+        )}
+      </summary>
+      <form
+        method="POST"
+        action={actions.barbers.save}
+        class="grid gap-4 border-t border-junta px-5 py-4 md:grid-cols-2"
+      >
+        {b && <input type="hidden" name="id" value={b.id} />}
+        <div>
+          <label class="label">Nombre</label>
+          <input class="input" name="name" value={b?.name ?? ""} required />
+        </div>
+        <div>
+          <label class="label">Cuenta (correo)</label>
+          <input
+            class="input"
+            name="email"
+            type="email"
+            value={emailOf(b?.userId ?? null)}
+            placeholder="Para que acceda al panel"
+          />
+          <p class="mt-1 text-xs text-cromo">
+            El barbero se registra en la web y aquí pones su correo; recibirá
+            acceso a su agenda.
+          </p>
+        </div>
+        <div class="md:col-span-2">
+          <label class="label">Bio</label>
+          <input class="input" name="bio" value={b?.bio ?? ""} />
+        </div>
+        <div class="md:col-span-2">
+          <label class="label">URL de foto</label>
+          <input
+            class="input"
+            name="photoUrl"
+            type="url"
+            value={b?.photoUrl ?? ""}
+            placeholder="https://…"
+          />
+        </div>
+        <fieldset class="md:col-span-2">
+          <legend class="label">Servicios que realiza</legend>
+          <div class="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+            {services.map((s) => (
+              <label class="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="serviceIds"
+                  value={s.id}
+                  checked={b ? offers(b.id, s.id) : s.active}
+                />
+                {s.name}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        {b && (
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="active" checked={b.active} /> Activo
+            (recibe reservas)
+          </label>
+        )}
+        <div class="flex justify-end md:col-span-2">
+          <button class="btn-primary">{b ? "Guardar" : "Crear barbero"}</button>
+        </div>
+      </form>
+    </details>
+  ))}
+  <p class="mt-4 text-sm text-cromo">
+    Después de crear un barbero, configura su{" "}
+    <a
+      class="text-botella underline decoration-junta decoration-2 underline-offset-4 hover:underline"
+      href="/panel/horarios"
+    >
+      horario
+    </a>
+    .
+  </p>
+</PanelLayout>

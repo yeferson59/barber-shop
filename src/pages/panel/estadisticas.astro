@@ -1,0 +1,193 @@
+---
+import PanelLayout from "@/layouts/PanelLayout.astro";
+import BarChart from "@/components/BarChart.astro";
+import { getStats } from "@/lib/stats";
+import { fmtDateStr, formatPrice } from "@/lib/time";
+
+const periods = [7, 30, 90];
+const requested = Number(Astro.url.searchParams.get("dias"));
+const days = periods.includes(requested) ? requested : 30;
+const stats = await getStats(days);
+const { kpis } = stats;
+
+const pct = (v: number) => `${Math.round(v * 100)}%`;
+const compact = (cents: number) =>
+  new Intl.NumberFormat("es", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(cents / 100);
+const maxService = Math.max(1, ...stats.services.map((s) => s.count));
+const labelEvery = days <= 7 ? 1 : days <= 30 ? 5 : 15;
+---
+
+<PanelLayout title="Estadísticas">
+  <div slot="actions" class="flex gap-1">
+    {periods.map((p) => (
+      <a
+        href={`?dias=${p}`}
+        class:list={["btn-sm", p === days ? "btn-dark" : "btn-ghost"]}
+      >
+        {p} días
+      </a>
+    ))}
+  </div>
+
+  <p class="-mt-4 mb-6 text-sm text-cromo first-letter:uppercase">
+    {fmtDateStr(stats.from, "d MMM")} – {fmtDateStr(stats.to, "d MMM yyyy")}
+  </p>
+
+  <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div class="card p-4">
+      <p class="text-xs text-cromo">Ingresos</p>
+      <p class="font-display text-3xl">{formatPrice(kpis.revenue)}</p>
+      <p class="text-xs text-cromo">{kpis.completed} servicios completados</p>
+    </div>
+    <div class="card p-4">
+      <p class="text-xs text-cromo">Ticket medio</p>
+      <p class="font-display text-3xl">{formatPrice(kpis.avgTicket)}</p>
+      <p class="text-xs text-cromo">{kpis.appointments} citas en total</p>
+    </div>
+    <div class="card p-4">
+      <p class="text-xs text-cromo">Cancelaciones / No asistió</p>
+      <p class="font-display text-3xl">
+        {pct(kpis.cancelRate)} <span class="text-junta">/</span>{" "}
+        {pct(kpis.noShowRate)}
+      </p>
+      <p class="text-xs text-cromo">sobre citas ya pasadas</p>
+    </div>
+    <div class="card p-4">
+      <p class="text-xs text-cromo">Clientes nuevos</p>
+      <p class="font-display text-3xl">{kpis.newClients}</p>
+      <p class="text-xs text-cromo">cuentas creadas en el periodo</p>
+    </div>
+  </div>
+
+  <div class="mt-6 grid gap-6 xl:grid-cols-2">
+    <section class="card p-5">
+      <h2 class="text-xl">Citas por día</h2>
+      <p class="mb-4 text-xs text-cromo">Sin contar canceladas</p>
+      <BarChart
+        labelEvery={labelEvery}
+        data={stats.daily.map((d) => ({
+          label: fmtDateStr(d.date, "d/M"),
+          value: d.count,
+          tooltip: `${fmtDateStr(d.date, "EEE d MMM")}: ${d.count} citas`,
+        }))}
+      />
+    </section>
+
+    <section class="card p-5">
+      <h2 class="text-xl">Ingresos por día</h2>
+      <p class="mb-4 text-xs text-cromo">Servicios completados</p>
+      <BarChart
+        labelEvery={labelEvery}
+        format={compact}
+        data={stats.daily.map((d) => ({
+          label: fmtDateStr(d.date, "d/M"),
+          value: d.revenue,
+          tooltip: `${fmtDateStr(d.date, "EEE d MMM")}: ${formatPrice(d.revenue)}`,
+        }))}
+      />
+    </section>
+
+    <section class="card p-5">
+      <h2 class="mb-4 text-xl">Servicios más pedidos</h2>
+      <ul class="space-y-3 text-sm">
+        {stats.services.map((s) => (
+          <li>
+            <div class="mb-1 flex justify-between gap-2">
+              <span class="font-medium">{s.name}</span>
+              <span class="text-cromo">
+                {s.count} veces, {formatPrice(s.revenue)}
+              </span>
+            </div>
+            <div class="h-2.5 rounded-full bg-azulejo">
+              <div
+                class="h-full rounded-full bg-botella"
+                style={{ width: `${(s.count / maxService) * 100}%` }}
+              />
+            </div>
+          </li>
+        ))}
+        {stats.services.length === 0 && (
+          <li class="text-cromo">Sin datos en este periodo.</li>
+        )}
+      </ul>
+    </section>
+
+    <section class="card p-5">
+      <h2 class="text-xl">Horas pico</h2>
+      <p class="mb-4 text-xs text-cromo">Citas por hora de inicio</p>
+      <BarChart
+        height={140}
+        data={stats.hours.map((h) => ({
+          label: `${h.hour}h`,
+          value: h.count,
+          tooltip: `${h.hour}:00–${h.hour + 1}:00: ${h.count} citas`,
+        }))}
+      />
+    </section>
+  </div>
+
+  <section class="card mt-6 overflow-x-auto">
+    <h2 class="border-b border-junta px-5 py-3 text-xl">Por barbero</h2>
+    <table class="w-full text-left text-sm">
+      <thead class="text-xs text-cromo">
+        <tr>
+          <th class="px-5 py-2">Barbero</th>
+          <th class="px-5 py-2 text-right">Completadas</th>
+          <th class="px-5 py-2 text-right">Ingresos</th>
+          <th class="px-5 py-2 text-right">No asistió</th>
+          <th class="px-5 py-2">Ocupación</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-junta">
+        {stats.barbers.map((b) => (
+          <tr>
+            <td class="px-5 py-3 font-medium">{b.name}</td>
+            <td class="px-5 py-3 text-right">{b.completed}</td>
+            <td class="px-5 py-3 text-right">{formatPrice(b.revenue)}</td>
+            <td class="px-5 py-3 text-right">{b.noShows}</td>
+            <td class="px-5 py-3">
+              <div class="flex items-center gap-2">
+                <div class="h-2 w-32 rounded-full bg-azulejo">
+                  <div
+                    class="h-full rounded-full bg-botella"
+                    style={{ width: pct(b.occupancy) }}
+                  />
+                </div>
+                <span class="text-cromo">{pct(b.occupancy)}</span>
+              </div>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </section>
+
+  <details class="card mt-6 p-5 text-sm">
+    <summary class="cursor-pointer font-semibold">
+      Ver datos diarios en tabla
+    </summary>
+    <table class="mt-3 w-full text-left">
+      <thead class="text-xs text-cromo">
+        <tr>
+          <th class="py-1">Día</th>
+          <th class="py-1 text-right">Citas</th>
+          <th class="py-1 text-right">Ingresos</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-junta">
+        {stats.daily.map((d) => (
+          <tr>
+            <td class="py-1 first-letter:uppercase">
+              {fmtDateStr(d.date, "EEE d MMM")}
+            </td>
+            <td class="py-1 text-right">{d.count}</td>
+            <td class="py-1 text-right">{formatPrice(d.revenue)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </details>
+</PanelLayout>

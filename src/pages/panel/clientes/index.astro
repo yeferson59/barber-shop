@@ -1,0 +1,108 @@
+---
+import { and, desc, eq, like, or, sql } from "drizzle-orm";
+import PanelLayout from "@/layouts/PanelLayout.astro";
+import { db } from "@/db";
+import { appointment, user } from "@/db/schema";
+import { fmt, formatPrice } from "@/lib/time";
+
+const q = (Astro.url.searchParams.get("q") ?? "").trim();
+const pattern = `%${q}%`;
+
+const clients = await db
+  .select({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    createdAt: user.createdAt,
+    visits: sql<number>`count(case when ${appointment.status} = 'completed' then 1 end)`,
+    spent: sql<number>`coalesce(sum(case when ${appointment.status} = 'completed' then ${appointment.priceCents} end), 0)`,
+    lastVisit: sql<
+      number | null
+    >`max(case when ${appointment.status} = 'completed' then ${appointment.startsAt} end)`,
+    upcoming: sql<number>`count(case when ${appointment.status} = 'confirmed' and ${appointment.startsAt} > ${Date.now()} then 1 end)`,
+  })
+  .from(user)
+  .leftJoin(appointment, eq(appointment.clientId, user.id))
+  .where(
+    and(
+      eq(user.role, "user"),
+      q
+        ? or(
+            like(user.name, pattern),
+            like(user.email, pattern),
+            like(user.phone, pattern),
+          )
+        : undefined,
+    ),
+  )
+  .groupBy(user.id)
+  .orderBy(desc(sql`max(${appointment.startsAt})`))
+  .limit(200);
+
+const isPlaceholder = (email: string) => email.endsWith("@clientes.local");
+---
+
+<PanelLayout title="Clientes">
+  <form slot="actions" method="GET" class="flex gap-2">
+    <input
+      class="input w-64"
+      name="q"
+      value={q}
+      placeholder="Buscar por nombre, correo o teléfono"
+    />
+    <button class="btn-dark">Buscar</button>
+  </form>
+
+  <div class="card overflow-x-auto">
+    <table class="w-full text-left text-sm">
+      <thead class="border-b border-junta bg-azulejo/60 text-xs text-cromo">
+        <tr>
+          <th class="px-4 py-3">Cliente</th>
+          <th class="px-4 py-3">Contacto</th>
+          <th class="px-4 py-3 text-right">Visitas</th>
+          <th class="px-4 py-3 text-right">Gastado</th>
+          <th class="px-4 py-3">Última visita</th>
+          <th class="px-4 py-3">Próximas</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-junta">
+        {clients.map((c) => (
+          <tr class="hover:bg-azulejo/60">
+            <td class="px-4 py-3">
+              <a
+                href={`/panel/clientes/${c.id}`}
+                class="font-semibold hover:text-poste"
+              >
+                {c.name}
+              </a>
+            </td>
+            <td class="px-4 py-3 text-cromo">
+              {!isPlaceholder(c.email) && <div>{c.email}</div>}
+              {c.phone && <div>{c.phone}</div>}
+            </td>
+            <td class="px-4 py-3 text-right">{c.visits}</td>
+            <td class="px-4 py-3 text-right">{formatPrice(c.spent)}</td>
+            <td class="px-4 py-3 text-cromo">
+              {c.lastVisit ? fmt(new Date(c.lastVisit), "d MMM yyyy") : "—"}
+            </td>
+            <td class="px-4 py-3">
+              {c.upcoming > 0 ? (
+                <span class="badge bg-botella text-loza">{c.upcoming}</span>
+              ) : (
+                "—"
+              )}
+            </td>
+          </tr>
+        ))}
+        {clients.length === 0 && (
+          <tr>
+            <td colspan="6" class="px-4 py-10 text-center text-cromo">
+              No hay clientes{q && " que coincidan"}.
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+</PanelLayout>
