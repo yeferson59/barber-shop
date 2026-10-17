@@ -1,7 +1,7 @@
 import { TZDate, tz } from "@date-fns/tz";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { env } from "./env";
+import { env } from "@/config/env";
 
 export const SHOP_TZ = env.SHOP_TIMEZONE || "America/Bogota";
 

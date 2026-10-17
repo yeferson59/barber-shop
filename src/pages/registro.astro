@@ -87,7 +87,7 @@ if (Astro.locals.user) return Astro.redirect(next || "/");
 </Layout>
 
 <script>
-  import { authClient } from "../lib/auth-client";
+  import { authClient } from "@/lib/auth-client";
 
   const form = document.querySelector<HTMLFormElement>("#signup-form")!;
   const error = form.querySelector<HTMLElement>("[data-error]")!;

@@ -1,13 +1,13 @@
 ---
 import { actions } from "astro:actions";
 import { and, desc, eq } from "drizzle-orm";
-import PanelLayout from "../../../layouts/PanelLayout.astro";
-import ActionAlert from "../../../components/ActionAlert.astro";
-import StatusBadge from "../../../components/StatusBadge.astro";
-import { db } from "../../../db";
-import { appointment, clientNote, user } from "../../../db/schema";
-import { fmt, formatPrice, toDateStr } from "../../../lib/time";
-import { hasLogin, isPlaceholderEmail } from "../../../lib/invite";
+import PanelLayout from "@/layouts/PanelLayout.astro";
+import ActionAlert from "@/components/ActionAlert.astro";
+import StatusBadge from "@/components/StatusBadge.astro";
+import { db } from "@/db";
+import { appointment, clientNote, user } from "@/db/schema";
+import { fmt, formatPrice, toDateStr } from "@/lib/time";
+import { hasLogin, isPlaceholderEmail } from "@/lib/invite";
 
 const isAdmin = Astro.locals.user!.role === "admin";
 // Un barbero solo ve el historial de sus propias citas y solo a clientes que ha atendido.

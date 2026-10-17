@@ -3,7 +3,7 @@
  *   pnpm db:seed
  */
 import { hashPassword } from "better-auth/crypto";
-import { db } from "./index";
+import { db } from "@/db";
 import {
   account,
   appointment,
@@ -17,8 +17,8 @@ import {
   user,
   workingHours,
   type Role,
-} from "./schema";
-import { addDaysStr, atLocal, todayStr, weekdayOf } from "../lib/time";
+} from "@/db/schema";
+import { addDaysStr, atLocal, todayStr, weekdayOf } from "@/lib/time";
 
 async function createUser(
   email: string,

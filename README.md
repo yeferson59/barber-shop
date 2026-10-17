@@ -47,10 +47,13 @@ Usuarios de ejemplo:
 ## Estructura
 
 ```
-src/db/schema.ts         tablas (auth + barbería)
+src/config/env.ts        variables de entorno
+src/db/index.ts          cliente de la BD y transacciones de escritura
+src/db/schema/           tablas: auth.ts (better-auth) ← shop.ts (barbería) ← relations.ts
 src/lib/availability.ts  cálculo de horarios libres y ocupación
 src/lib/booking.ts       crear / reprogramar / cancelar (evita dobles reservas)
 src/lib/stats.ts         estadísticas
+src/lib/invite.ts        enlaces de un solo uso (barberos y clientes)
 src/actions/index.ts     todas las mutaciones (Astro Actions)
 src/middleware.ts        sesión y protección de rutas por rol
 src/pages/               páginas públicas, /mis-citas y /panel

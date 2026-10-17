@@ -1,8 +1,9 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin } from "better-auth/plugins";
-import { db, schema } from "@/db";
-import { env } from "@/lib/env";
+import { db } from "@/db";
+import * as schema from "@/db/schema";
+import { env } from "@/config/env";
 
 // better-auth solo avisa (no falla) con un secreto corto o el del ejemplo.
 if (

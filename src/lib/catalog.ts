@@ -1,11 +1,6 @@
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { barber, barberService, service, workingHours } from "../db/schema";
-import type {
-  WizardBarber,
-  WizardDay,
-  WizardService,
-} from "@/components/islands/BookingWizard";
+import { barber, barberService, service, workingHours } from "@/db/schema";
 import { getSettings } from "./settings";
 import {
   addDaysStr,
@@ -15,6 +10,34 @@ import {
   ucfirst,
   weekdayOf,
 } from "./time";
+
+// Forma de los datos que recibe el asistente de reservas (BookingWizard).
+
+export interface WizardService {
+  id: string;
+  name: string;
+  description: string | null;
+  durationMin: number;
+  price: string;
+}
+
+export interface WizardBarber {
+  id: string;
+  name: string;
+  photoUrl: string | null;
+  serviceIds: string[];
+}
+
+export interface WizardDay {
+  date: string;
+  weekday: string;
+  day: string;
+  month: string;
+  /** "viernes 16 de octubre" */
+  long: string;
+  /** Ningún barbero trabaja ese día de la semana */
+  closed: boolean;
+}
 
 /** Datos que necesita el asistente de reservas. */
 export async function getBookingCatalog() {

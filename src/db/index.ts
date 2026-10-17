@@ -1,7 +1,7 @@
 import { createClient, type ResultSet } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
-import { env } from "@/lib/env";
+import { env } from "@/config/env";
 import * as schema from "./schema";
 
 const url = env.DATABASE_URL || "file:./data/barber.db";
@@ -21,7 +21,6 @@ const client = createClient({
 });
 
 export const db = drizzle(client, { schema });
-export { schema };
 
 /** `db` o una transacción: para funciones que deben poder leer dentro de una. */
 export type Executor = BaseSQLiteDatabase<"async", ResultSet, typeof schema>;

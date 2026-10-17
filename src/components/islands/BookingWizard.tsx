@@ -1,31 +1,7 @@
 import { actions } from "astro:actions";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-
-export interface WizardService {
-  id: string;
-  name: string;
-  description: string | null;
-  durationMin: number;
-  price: string;
-}
-
-export interface WizardBarber {
-  id: string;
-  name: string;
-  photoUrl: string | null;
-  serviceIds: string[];
-}
-
-export interface WizardDay {
-  date: string;
-  weekday: string;
-  day: string;
-  month: string;
-  /** "viernes 16 de octubre" */
-  long: string;
-  /** Ningún barbero trabaja ese día de la semana */
-  closed: boolean;
-}
+// Solo tipos: se borran al compilar y no meten código de servidor en la isla.
+import type { WizardBarber, WizardDay, WizardService } from "@/lib/catalog";
 
 interface Slot {
   time: string;
