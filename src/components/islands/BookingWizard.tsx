@@ -138,53 +138,75 @@ export default function BookingWizard({ services, barbers, days, loggedIn, initi
     if (barberId && !date && days.length) setDate((days.find((d) => !d.closed) ?? days[0]).date);
   }, [barberId]);
 
-  function loadSlots() {
-    if (!serviceId || !barberId || !date) {
+  // Cada petición lleva un id; solo la última puede escribir estado
+  const [refresh, setRefresh] = useState(0);
+  const submittingRef = useRef(false);
+  const [slotsError, setSlotsError] = useState(false);
+  const longDate = (d: WizardDay) => d.long.charAt(0).toUpperCase() + d.long.slice(1);
+
+  useEffect(() => {
+    setSlot(null);
+    setSlotsError(false);
+    if (!service || !barberId || !date) {
       setSlots(null);
+      setLoadingSlots(false);
       return;
     }
     const ctrl = new AbortController();
+    setSlots(null);
     setLoadingSlots(true);
-    const params = new URLSearchParams({ serviceId, barberId, date });
+    const params = new URLSearchParams({ serviceId: service.id, barberId, date });
     if (reschedule) params.set("exclude", reschedule.appointmentId);
     fetch(`/api/slots?${params}`, { signal: ctrl.signal })
-      .then((r) => r.json())
-      .then((data: { slots: Slot[] }) => {
+      .then((r) => {
+        if (!r.ok) throw new Error("slots");
+        return r.json() as Promise<{ slots: Slot[] }>;
+      })
+      .then((data) => {
+        if (ctrl.signal.aborted) return;
         setSlots(data.slots);
+        setLoadingSlots(false);
         if (pendingTime.current) {
           const found = data.slots.find((s) => s.time === pendingTime.current);
           if (found) setSlot(found);
           pendingTime.current = undefined;
         }
       })
-      .catch(() => {})
-      .finally(() => setLoadingSlots(false));
+      .catch(() => {
+        if (ctrl.signal.aborted) return;
+        setSlotsError(true);
+        setLoadingSlots(false);
+      });
     return () => ctrl.abort();
-  }
-
-  useEffect(loadSlots, [serviceId, barberId, date]);
+  }, [service?.id, barberId, date, refresh]);
 
   async function confirm() {
-    if (!service || !slot) return;
+    if (!service || !slot || submittingRef.current) return;
     setError(null);
     if (!loggedIn) {
       const back = new URLSearchParams({ service: service.id, barber: barberId, date, time: slot.time });
       window.location.href = `/login?next=${encodeURIComponent(`/agendar?${back}`)}`;
       return;
     }
+    submittingRef.current = true;
     setSubmitting(true);
-    const result = reschedule
-      ? await actions.booking.reschedule({ id: reschedule.appointmentId, barberId, startsAt: slot.startsAt })
-      : await actions.booking.create({ serviceId: service.id, barberId, startsAt: slot.startsAt, notes: notes || undefined });
-    setSubmitting(false);
-    if (result.error) {
-      setError(result.error.message);
-      // El horario pudo ocuparse mientras tanto: refrescar
-      setSlot(null);
-      loadSlots();
-      return;
+    try {
+      const result = reschedule
+        ? await actions.booking.reschedule({ id: reschedule.appointmentId, barberId, startsAt: slot.startsAt })
+        : await actions.booking.create({ serviceId: service.id, barberId, startsAt: slot.startsAt, notes: notes || undefined });
+      if (result.error) {
+        setError(result.error.message);
+        // El horario pudo ocuparse mientras tanto: refrescar
+        setRefresh((n) => n + 1);
+        return;
+      }
+      window.location.href = reschedule ? "/mis-citas?ok=reprogramada" : "/mis-citas?ok=nueva";
+    } catch {
+      setError("No pudimos guardar la cita. Revisa tu conexión e inténtalo de nuevo.");
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
-    window.location.href = reschedule ? "/mis-citas?ok=reprogramada" : "/mis-citas?ok=nueva";
   }
 
   const visibleDays = days.slice(dayOffset, dayOffset + 7);
@@ -346,6 +368,14 @@ export default function BookingWizard({ services, barbers, days, loggedIn, initi
 
             <div className="mt-6 min-h-28" aria-live="polite">
               {loadingSlots && <p className="text-cromo">Buscando horas libres…</p>}
+              {slotsError && !loadingSlots && (
+                <p className="rounded-md bg-azulejo px-4 py-4 text-botella-2">
+                  No pudimos cargar las horas.{" "}
+                  <button type="button" className="link" onClick={() => setRefresh((n) => n + 1)}>
+                    Reintentar
+                  </button>
+                </p>
+              )}
               {!loadingSlots && slots && slots.length === 0 && (
                 <p className="rounded-md bg-azulejo px-4 py-4 text-botella-2">
                   No quedan horas libres {day ? `el ${day.long}` : "este día"}. Prueba otro día
@@ -403,7 +433,7 @@ export default function BookingWizard({ services, barbers, days, loggedIn, initi
                   <dt className="text-sm text-azulejo/70">Cuándo</dt>
                   <dd>
                     <span className="block font-display text-3xl leading-tight">{slot.time}</span>
-                    <span className="first-letter:uppercase">{day.long}</span>
+                    <span>{longDate(day)}</span>
                   </dd>
                 </div>
               )}
@@ -452,7 +482,7 @@ export default function BookingWizard({ services, barbers, days, loggedIn, initi
         <div className="fixed inset-x-0 bottom-0 z-20 flex items-center justify-between gap-3 border-t border-junta bg-loza px-4 py-3 lg:hidden">
           <p className="text-sm leading-tight">
             <span className="block font-semibold">{slot.time}</span>
-            <span className="text-cromo first-letter:uppercase">{day.long}</span>
+            <span className="text-cromo">{longDate(day)}</span>
           </p>
           <button
             type="button"

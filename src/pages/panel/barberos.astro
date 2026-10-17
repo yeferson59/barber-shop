@@ -1,17 +1,25 @@
 ---
 import { actions } from "astro:actions";
-import { asc, desc } from "drizzle-orm";
+import { asc, desc, inArray } from "drizzle-orm";
 import PanelLayout from "@/layouts/PanelLayout.astro";
 import ActionAlert from "@/components/ActionAlert.astro";
 import { db } from "@/db";
 import { barber, barberService, service, user } from "@/db/schema";
 
-const [barbers, services, links, users] = await Promise.all([
+if (Astro.locals.user?.role !== "admin") return Astro.redirect("/panel");
+
+const [barbers, services, links] = await Promise.all([
   db.select().from(barber).orderBy(desc(barber.active), asc(barber.name)),
   db.select().from(service).orderBy(asc(service.name)),
   db.select().from(barberService),
-  db.select({ id: user.id, email: user.email }).from(user),
 ]);
+const userIds = barbers.flatMap((b) => (b.userId ? [b.userId] : []));
+const users = userIds.length
+  ? await db
+      .select({ id: user.id, email: user.email })
+      .from(user)
+      .where(inArray(user.id, userIds))
+  : [];
 const emailOf = (id: string | null) =>
   users.find((u) => u.id === id)?.email ?? "";
 const offers = (b: string, s: string) =>

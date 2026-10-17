@@ -42,7 +42,7 @@ export function toTiles(
     let state: TileState = "free";
     if (working < step / 2) state = "closed";
     else if (off >= step / 2) state = "off";
-    else if (busy >= step / 2 || busy + off >= step / 2) state = "busy";
+    else if (busy + off >= step / 2) state = "busy";
 
     tiles.push({ ...t, state, past: nowMin !== null && t.end <= nowMin });
   }
@@ -58,7 +58,8 @@ export interface LiveStatus {
 /** Estado actual de un barbero en una frase. */
 export function liveStatus(day: DayOccupancy, nowMin: number): LiveStatus {
   const { hours, blocks } = day;
-  if (hours.length === 0) return { tone: "closed", text: "Hoy no trabaja" };
+  // Sin turnos, o con todos sus turnos bloqueados (festivo, día libre)
+  if (hours.length === 0 || day.workMin === 0) return { tone: "closed", text: "Hoy no trabaja" };
 
   const first = hours[0];
   const last = hours[hours.length - 1];

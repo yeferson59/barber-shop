@@ -99,6 +99,14 @@ export const verification = sqliteTable(
   (t) => [index("verification_identifier_idx").on(t.identifier)],
 );
 
+// Límite de peticiones de better-auth: en BD para que valga entre instancias.
+export const rateLimit = sqliteTable("rate_limit", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  count: integer("count").notNull(),
+  lastRequest: integer("last_request").notNull(),
+});
+
 // ---------------------------------------------------------------------------
 // Barbería
 // ---------------------------------------------------------------------------

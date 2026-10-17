@@ -6,7 +6,7 @@ import ActionAlert from "@/components/ActionAlert.astro";
 import { db } from "@/db";
 import { timeOff } from "@/db/schema";
 import { scopedBarbers } from "@/lib/panel";
-import { fmt, todayStr } from "@/lib/time";
+import { fmt, toDateStr, todayStr, ucfirst } from "@/lib/time";
 
 const { barbers } = await scopedBarbers(Astro.locals, Astro.url);
 const isAdmin = Astro.locals.user!.role === "admin";
@@ -19,20 +19,20 @@ const rows = ids.length
         and(inArray(timeOff.barberId, ids), gt(timeOff.endsAt, new Date())),
       )
       .orderBy(asc(timeOff.startsAt))
+      .limit(200)
   : [];
 const nameOf = (id: string) => barbers.find((b) => b.id === id)?.name ?? "";
 const today = todayStr();
 
 const describe = (r: (typeof rows)[number]) => {
   const sameDay =
-    fmt(r.startsAt, "yyyy-MM-dd") ===
-    fmt(new Date(r.endsAt.getTime() - 1), "yyyy-MM-dd");
+    toDateStr(r.startsAt) === toDateStr(new Date(r.endsAt.getTime() - 1));
   const allDay =
     fmt(r.startsAt, "HH:mm") === "00:00" && fmt(r.endsAt, "HH:mm") === "00:00";
   if (sameDay && allDay)
-    return fmt(r.startsAt, "EEEE d 'de' MMMM") + ", todo el día";
+    return ucfirst(fmt(r.startsAt, "EEEE d 'de' MMMM")) + ", todo el día";
   if (sameDay)
-    return `${fmt(r.startsAt, "EEEE d 'de' MMMM")}, de ${fmt(r.startsAt, "HH:mm")} a ${fmt(r.endsAt, "HH:mm")}`;
+    return `${ucfirst(fmt(r.startsAt, "EEEE d 'de' MMMM"))}, de ${fmt(r.startsAt, "HH:mm")} a ${fmt(r.endsAt, "HH:mm")}`;
   if (allDay)
     return `Del ${fmt(r.startsAt, "d 'de' MMMM")} al ${fmt(new Date(r.endsAt.getTime() - 1), "d 'de' MMMM")}`;
   return `Del ${fmt(r.startsAt, "d 'de' MMMM, HH:mm")} al ${fmt(r.endsAt, "d 'de' MMMM, HH:mm")}`;
@@ -116,7 +116,7 @@ const describe = (r: (typeof rows)[number]) => {
           <li class="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
             <div>
               <p class="font-medium">{nameOf(r.barberId)}</p>
-              <p class="text-cromo first-letter:uppercase">{describe(r)}</p>
+              <p class="text-cromo">{describe(r)}</p>
               {r.reason && <p class="text-cromo">{r.reason}</p>}
             </div>
             <form method="POST" action={actions.timeOff.delete}>

@@ -1,19 +1,28 @@
 ---
 import { actions } from "astro:actions";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import PanelLayout from "../../../layouts/PanelLayout.astro";
 import ActionAlert from "../../../components/ActionAlert.astro";
 import StatusBadge from "../../../components/StatusBadge.astro";
 import { db } from "../../../db";
 import { appointment, clientNote, user } from "../../../db/schema";
-import { fmt, formatPrice } from "../../../lib/time";
+import { fmt, formatPrice, toDateStr } from "../../../lib/time";
 
-const client = await db.query.user.findFirst({ where: eq(user.id, Astro.params.id!) });
+const isAdmin = Astro.locals.user!.role === "admin";
+// Un barbero solo ve el historial de sus propias citas y solo a clientes que ha atendido.
+const scopeBarberId = isAdmin ? undefined : (Astro.locals.barberId ?? "");
+
+const client = await db.query.user.findFirst({
+  where: and(eq(user.id, Astro.params.id!), eq(user.role, "user")),
+});
 if (!client) return Astro.redirect("/panel/clientes");
 
 const [appts, notes] = await Promise.all([
   db.query.appointment.findMany({
-    where: eq(appointment.clientId, client.id),
+    where: and(
+      eq(appointment.clientId, client.id),
+      scopeBarberId !== undefined ? eq(appointment.barberId, scopeBarberId) : undefined,
+    ),
     with: { service: true, barber: true },
     orderBy: desc(appointment.startsAt),
   }),
@@ -24,6 +33,9 @@ const [appts, notes] = await Promise.all([
     .where(eq(clientNote.clientId, client.id))
     .orderBy(desc(clientNote.createdAt)),
 ]);
+
+if (scopeBarberId !== undefined && appts.length === 0)
+  return Astro.redirect("/panel/clientes");
 
 const completed = appts.filter((a) => a.status === "completed");
 const spent = completed.reduce((n, a) => n + a.priceCents, 0);
@@ -56,7 +68,7 @@ const isPlaceholder = client.email.endsWith("@clientes.local");
                 <div>
                   <p class="font-medium">{a.service.name} <span class="font-normal text-botella-2">con {a.barber.name}</span></p>
                   <p class="text-cromo">
-                    <a href={`/panel?fecha=${fmt(a.startsAt, "yyyy-MM-dd")}`} class="hover:underline">{fmt(a.startsAt, "EEE d MMM yyyy, HH:mm")}</a>
+                    <a href={`/panel?fecha=${toDateStr(a.startsAt)}`} class="hover:underline">{fmt(a.startsAt, "EEE d MMM yyyy, HH:mm")}</a>
                     {a.notes && <span class="block italic">“{a.notes}”</span>}
                   </p>
                 </div>

@@ -56,11 +56,28 @@ const [appts, services, clients] = await Promise.all([
     .from(service)
     .where(eq(service.active, true))
     .orderBy(asc(service.name)),
-  db
-    .select({ email: user.email, name: user.name })
-    .from(user)
-    .where(eq(user.role, "user"))
-    .orderBy(asc(user.name)),
+  // Los barberos solo ven (y autocompletan) clientes que han atendido ellos.
+  isAdmin || Astro.locals.barberId
+    ? db
+        .select({ email: user.email, name: user.name })
+        .from(user)
+        .where(
+          and(
+            eq(user.role, "user"),
+            isAdmin
+              ? undefined
+              : inArray(
+                  user.id,
+                  db
+                    .select({ id: appointment.clientId })
+                    .from(appointment)
+                    .where(eq(appointment.barberId, Astro.locals.barberId!)),
+                ),
+          ),
+        )
+        .orderBy(asc(user.name))
+        .limit(1000)
+    : [],
 ]);
 
 const occupancy = (await getOccupancy(date, 1)).filter((o) =>
@@ -88,7 +105,11 @@ const isPast = (a: (typeof appts)[number]) => a.startsAt.getTime() < Date.now();
 
 <PanelLayout title="Agenda">
   <form slot="actions" class="flex flex-wrap items-center gap-2" method="GET">
-    <a class="btn-ghost btn-sm" href={`?fecha=${addDaysStr(date, -1)}`}>
+    <a
+      class="btn-ghost btn-sm"
+      aria-label="Día anterior"
+      href={`?fecha=${addDaysStr(date, -1)}`}
+    >
       ‹
     </a>
     <a
@@ -97,13 +118,18 @@ const isPast = (a: (typeof appts)[number]) => a.startsAt.getTime() < Date.now();
     >
       Hoy
     </a>
-    <a class="btn-ghost btn-sm" href={`?fecha=${addDaysStr(date, 1)}`}>
+    <a
+      class="btn-ghost btn-sm"
+      aria-label="Día siguiente"
+      href={`?fecha=${addDaysStr(date, 1)}`}
+    >
       ›
     </a>
     <input
       type="date"
       name="fecha"
       value={date}
+      aria-label="Fecha"
       class="input w-auto py-1"
       onchange="this.form.submit()"
     />
@@ -128,8 +154,9 @@ const isPast = (a: (typeof appts)[number]) => a.startsAt.getTime() < Date.now();
 
   {barbers.length === 0 ? (
     <p class="card p-6 text-cromo">
-      Tu usuario no está vinculado a ningún barbero. Pide al administrador que
-      te vincule en “Barberos”.
+      {isAdmin
+        ? "No hay barberos activos. Añade uno en “Barberos”."
+        : "Tu usuario no está vinculado a ningún barbero. Pide al administrador que te vincule en “Barberos”."}
     </p>
   ) : (
     <>
@@ -332,7 +359,7 @@ const isPast = (a: (typeof appts)[number]) => a.startsAt.getTime() < Date.now();
                               class="mt-2 flex w-full flex-wrap items-end gap-2"
                             >
                               <input type="hidden" name="id" value={a.id} />
-                              <select class="input w-auto py-1" name="barberId">
+                              <select class="input w-auto py-1" name="barberId" aria-label="Barbero">
                                 {barbers.map((x) => (
                                   <option
                                     value={x.id}
@@ -344,6 +371,7 @@ const isPast = (a: (typeof appts)[number]) => a.startsAt.getTime() < Date.now();
                               </select>
                               <input
                                 class="input w-auto py-1"
+                                aria-label="Nueva fecha"
                                 type="date"
                                 name="date"
                                 value={date}
@@ -351,6 +379,7 @@ const isPast = (a: (typeof appts)[number]) => a.startsAt.getTime() < Date.now();
                               />
                               <input
                                 class="input w-auto py-1"
+                                aria-label="Nueva hora"
                                 type="time"
                                 name="time"
                                 value={fmtTime(a.startsAt)}
@@ -389,13 +418,3 @@ const isPast = (a: (typeof appts)[number]) => a.startsAt.getTime() < Date.now();
     </>
   )}
 </PanelLayout>
-
-<script>
-  document
-    .querySelectorAll<HTMLFormElement>("form[data-confirm]")
-    .forEach((f) =>
-      f.addEventListener("submit", (e) => {
-        if (!confirm(f.dataset.confirm)) e.preventDefault();
-      }),
-    );
-</script>

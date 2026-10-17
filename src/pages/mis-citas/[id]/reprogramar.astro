@@ -3,13 +3,18 @@ import Layout from "@/layouts/Layout.astro";
 import BookingWizard from "@/components/islands/BookingWizard";
 import { getAppointment } from "@/lib/booking";
 import { getBookingCatalog } from "@/lib/catalog";
+import { getSettings } from "@/lib/settings";
 import { fmt } from "@/lib/time";
 
+const user = Astro.locals.user;
+if (!user) return Astro.redirect("/login?next=/mis-citas");
 const appt = await getAppointment(Astro.params.id!);
+const settings = await getSettings();
 if (
   !appt ||
-  appt.clientId !== Astro.locals.user!.id ||
-  appt.status !== "confirmed"
+  appt.clientId !== user.id ||
+  appt.status !== "confirmed" ||
+  appt.startsAt.getTime() - settings.cancelLimitHours * 3_600_000 <= Date.now()
 ) {
   return Astro.redirect("/mis-citas");
 }

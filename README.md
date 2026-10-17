@@ -2,7 +2,7 @@
 
 Web para una barbería con reservas online, vista pública de ocupación y panel de gestión.
 
-**Stack:** Astro 7 (SSR, adapter Node) · Tailwind 4 · React (solo el asistente de reservas) · better-auth · Drizzle + SQLite (libSQL).
+**Stack:** Astro 7 (SSR, adapter Vercel) · Tailwind 4 · React (solo el asistente de reservas) · better-auth · Drizzle + SQLite (libSQL).
 
 ## Puesta en marcha
 
@@ -58,9 +58,10 @@ src/pages/               páginas públicas, /mis-citas y /panel
 
 ## Producción
 
-```sh
-pnpm build
-pnpm start                  # node --env-file=.env dist/server/entry.mjs
-```
+Se despliega en Vercel (`@astrojs/vercel`). Cada petición puede ir a una instancia distinta y efímera, así que:
 
-La protección contra dobles reservas serializa las escrituras dentro del proceso; ejecuta **una sola instancia** del servidor (o añade un bloqueo en la base de datos si escalas a varias).
+- **La BD tiene que ser remota.** Crea una base en Turso y define en Vercel `DATABASE_URL=libsql://…` y `DATABASE_AUTH_TOKEN`. Con una URL `file:` la app se niega a arrancar en Vercel.
+- **Migra antes de desplegar:** `DATABASE_URL=libsql://… DATABASE_AUTH_TOKEN=… pnpm db:migrate`.
+- Define también `BETTER_AUTH_SECRET` (≥ 32 caracteres), `BETTER_AUTH_URL` (la URL pública), `SHOP_TIMEZONE` y `SHOP_CURRENCY`.
+
+Las reservas comprueban disponibilidad y escriben dentro de una transacción `BEGIN IMMEDIATE`, que la BD serializa entre instancias, y el límite de peticiones del login se guarda en la tabla `rate_limit`; ninguno depende de la memoria del proceso.

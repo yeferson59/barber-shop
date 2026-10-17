@@ -2,7 +2,9 @@
 import PanelLayout from "@/layouts/PanelLayout.astro";
 import BarChart from "@/components/BarChart.astro";
 import { getStats } from "@/lib/stats";
-import { fmtDateStr, formatPrice } from "@/lib/time";
+import { fmtDateStr, formatPrice, ucfirst } from "@/lib/time";
+
+if (Astro.locals.user?.role !== "admin") return Astro.redirect("/panel");
 
 const periods = [7, 30, 90];
 const requested = Number(Astro.url.searchParams.get("dias"));
@@ -32,7 +34,7 @@ const labelEvery = days <= 7 ? 1 : days <= 30 ? 5 : 15;
     ))}
   </div>
 
-  <p class="-mt-4 mb-6 text-sm text-cromo first-letter:uppercase">
+  <p class="-mt-4 mb-6 text-sm text-cromo">
     {fmtDateStr(stats.from, "d MMM")} – {fmtDateStr(stats.to, "d MMM yyyy")}
   </p>
 
@@ -180,8 +182,8 @@ const labelEvery = days <= 7 ? 1 : days <= 30 ? 5 : 15;
       <tbody class="divide-y divide-junta">
         {stats.daily.map((d) => (
           <tr>
-            <td class="py-1 first-letter:uppercase">
-              {fmtDateStr(d.date, "EEE d MMM")}
+            <td class="py-1">
+              {ucfirst(fmtDateStr(d.date, "EEE d MMM"))}
             </td>
             <td class="py-1 text-right">{d.count}</td>
             <td class="py-1 text-right">{formatPrice(d.revenue)}</td>

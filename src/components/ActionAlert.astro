@@ -12,5 +12,5 @@ const error = results.find((r) => r?.error)?.error;
 const ok = results.some((r) => r?.data);
 ---
 
-{error && <p class="alert-error mb-4">{error.message}</p>}
-{!error && ok && <p class="alert-ok mb-4">{success}</p>}
+{error && <p class="alert-error mb-4" role="alert">{error.message}</p>}
+{!error && ok && <p class="alert-ok mb-4" role="status">{success}</p>}

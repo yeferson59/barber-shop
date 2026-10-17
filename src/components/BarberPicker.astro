@@ -10,7 +10,7 @@ const { barbers, selectedId } = Astro.props;
   barbers.length > 1 && (
     <div class="mb-6 flex flex-wrap gap-2">
       {barbers.map((b) => (
-        <a href={`?barbero=${b.id}`} class:list={["btn-sm", b.id === selectedId ? "btn-dark" : "btn-ghost"]}>
+        <a href={`?barbero=${b.id}`} class:list={["btn-sm", b.id === selectedId ? "btn-dark" : "btn-ghost"]} aria-current={b.id === selectedId ? "true" : undefined}>
           {b.name}
         </a>
       ))}

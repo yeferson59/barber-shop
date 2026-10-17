@@ -9,10 +9,11 @@ const { open, close, every = 180 } = Astro.props;
 const marks: number[] = [];
 for (let m = Math.ceil(open / every) * every; m <= close; m += every) marks.push(m);
 if (marks[0] !== open) marks.unshift(open);
-const pct = (m: number) => ((m - open) / (close - open)) * 100;
+const span = Math.max(close - open, 1);
+const pct = (m: number) => ((m - open) / span) * 100;
 ---
 
-<div class="relative h-5 text-xs text-cromo tabular-nums" aria-hidden="true">
+<div class="relative h-5 text-xs text-cromo" aria-hidden="true">
   {
     marks.map((m) => (
       <span

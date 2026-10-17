@@ -1,13 +1,14 @@
 ---
 import Logo from "./Logo.astro";
 import { googleEnabled } from "@/auth";
+import { safeNext } from "@/lib/next";
 
 interface Props {
   title: string;
   subtitle: string;
 }
 const { title, subtitle } = Astro.props;
-const next = Astro.url.searchParams.get("next") ?? "";
+const next = safeNext(Astro.url.searchParams.get("next"));
 ---
 
 <div class="tile-wall flex min-h-[calc(100vh-4rem)] items-start justify-center px-4 py-12 sm:items-center">
@@ -50,9 +51,10 @@ const next = Astro.url.searchParams.get("next") ?? "";
   const btn = document.querySelector<HTMLButtonElement>("[data-google]");
   btn?.addEventListener("click", async () => {
     btn.disabled = true;
-    await authClient.signIn.social({
+    const { error } = await authClient.signIn.social({
       provider: "google",
       callbackURL: btn.dataset.next || "/",
     });
+    if (error) btn.disabled = false;
   });
 </script>

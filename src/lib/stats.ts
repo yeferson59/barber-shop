@@ -52,18 +52,19 @@ export async function getStats(days: number) {
       ? past.filter((r) => r.status === status).length / past.length
       : 0;
 
+  // Una sola pasada sobre las citas (antes: un filtro por día, O(días × citas))
+  const byDate = new Map<string, { count: number; revenue: number }>();
+  for (const r of rows) {
+    if (r.status === "cancelled") continue;
+    const date = toDateStr(r.startsAt);
+    const d = byDate.get(date) ?? { count: 0, revenue: 0 };
+    d.count++;
+    if (r.status === "completed") d.revenue += r.priceCents;
+    byDate.set(date, d);
+  }
   const daily = Array.from({ length: days }, (_, i) => {
     const date = addDaysStr(from, i);
-    const list = rows.filter(
-      (r) => r.status !== "cancelled" && toDateStr(r.startsAt) === date,
-    );
-    return {
-      date,
-      count: list.length,
-      revenue: list
-        .filter((r) => r.status === "completed")
-        .reduce((n, r) => n + r.priceCents, 0),
-    };
+    return { date, ...(byDate.get(date) ?? { count: 0, revenue: 0 }) };
   });
 
   const byService = new Map<

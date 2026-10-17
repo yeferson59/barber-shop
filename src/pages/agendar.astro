@@ -5,11 +5,21 @@ import { getBookingCatalog } from "@/lib/catalog";
 
 const catalog = await getBookingCatalog();
 const q = Astro.url.searchParams;
+const service = q.get("service");
+const barber = q.get("barber");
+const time = q.get("time");
 const initial = {
-  serviceId: q.get("service") ?? undefined,
-  barberId: q.get("barber") ?? undefined,
-  date: q.get("date") ?? undefined,
-  time: q.get("time") ?? undefined,
+  serviceId: catalog.services.some((s) => s.id === service)
+    ? (service ?? undefined)
+    : undefined,
+  barberId:
+    barber === "any" || catalog.barbers.some((b) => b.id === barber)
+      ? (barber ?? undefined)
+      : undefined,
+  date: catalog.days.some((d) => d.date === q.get("date"))
+    ? (q.get("date") ?? undefined)
+    : undefined,
+  time: time && /^\d{2}:\d{2}$/.test(time) ? time : undefined,
 };
 ---
 

@@ -31,7 +31,12 @@ export async function getBookingCatalog() {
       .where(eq(barber.active, true))
       .orderBy(asc(barber.name)),
     db.select().from(barberService),
-    db.selectDistinct({ weekday: workingHours.weekday }).from(workingHours),
+    // Solo cuentan los horarios de barberos activos
+    db
+      .selectDistinct({ weekday: workingHours.weekday })
+      .from(workingHours)
+      .innerJoin(barber, eq(barber.id, workingHours.barberId))
+      .where(eq(barber.active, true)),
   ]);
   const openWeekdays = new Set(hours.map((h) => h.weekday));
 

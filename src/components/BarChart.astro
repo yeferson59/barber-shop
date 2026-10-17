@@ -16,7 +16,6 @@ const top = Math.ceil(max / step) * step;
 const ticks = [0, top / 2, top];
 
 const W = 100; // unidades por barra (viewBox)
-const gap = 2;
 const width = data.length * W;
 const plotH = 1000;
 const r = 16; // radio superior
@@ -40,7 +39,7 @@ const barPath = (i: number, v: number) => {
       {[...ticks].reverse().map((t) => <span class="-translate-y-1/2 first:translate-y-0 last:-translate-y-full">{format(t)}</span>)}
     </div>
     <div class="relative min-w-0 flex-1">
-      <svg viewBox={`0 0 ${width} ${plotH}`} preserveAspectRatio="none" class="block h-(--h) w-full overflow-visible" role="img">
+      <svg viewBox={`0 0 ${width} ${plotH}`} preserveAspectRatio="none" class="block h-(--h) w-full overflow-visible" role="img" aria-label={data.map((d) => d.tooltip).join("; ")}>
         {ticks.map((t) => (
           <line x1="0" x2={width} y1={plotH - (t / top) * plotH} y2={plotH - (t / top) * plotH} stroke="var(--color-junta)" stroke-width="2" vector-effect="non-scaling-stroke" />
         ))}

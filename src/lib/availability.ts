@@ -1,5 +1,5 @@
 import { and, eq, gt, inArray, lt, ne } from "drizzle-orm";
-import { db } from "@/db";
+import { db, type Executor } from "@/db";
 import {
   appointment,
   barber,
@@ -36,10 +36,11 @@ async function loadBusy(
   barberIds: string[],
   range: { start: Date; end: Date },
   excludeAppointmentId?: string,
+  q: Executor = db,
 ) {
   if (barberIds.length === 0) return { appts: [], offs: [] };
   const [appts, offs] = await Promise.all([
-    db
+    q
       .select({
         id: appointment.id,
         barberId: appointment.barberId,
@@ -58,7 +59,7 @@ async function loadBusy(
             : undefined,
         ),
       ),
-    db
+    q
       .select()
       .from(timeOff)
       .where(
@@ -72,9 +73,13 @@ async function loadBusy(
   return { appts, offs };
 }
 
-async function loadHours(barberIds: string[], weekday: number) {
+async function loadHours(
+  barberIds: string[],
+  weekday: number,
+  q: Executor = db,
+) {
   if (barberIds.length === 0) return [];
-  return db
+  return q
     .select()
     .from(workingHours)
     .where(
@@ -175,18 +180,19 @@ export async function isBarberFree(
   start: Date,
   end: Date,
   excludeAppointmentId?: string,
+  q: Executor = db,
 ): Promise<boolean> {
   const date = toDateStr(start);
   const startMin = minutesOfDay(start);
   const endMin = startMin + Math.round((end.getTime() - start.getTime()) / MIN);
 
-  const hours = await loadHours([barberId], weekdayOf(date));
+  const hours = await loadHours([barberId], weekdayOf(date), q);
   const insideHours = hours.some(
     (h) => h.startMin <= startMin && endMin <= h.endMin,
   );
   if (!insideHours) return false;
 
-  const busy = await loadBusy([barberId], { start, end }, excludeAppointmentId);
+  const busy = await loadBusy([barberId], { start, end }, excludeAppointmentId, q);
   return busy.appts.length === 0 && busy.offs.length === 0;
 }
 
@@ -212,21 +218,55 @@ export interface BarberOccupancy {
   days: DayOccupancy[];
 }
 
+type Span = { start: number; end: number };
+
+/** Recorta un intervalo al día y lo pasa a minutos de reloj local (como el horario semanal). */
 function clipMinutes(iv: Interval, dayStart: number, dayEnd: number) {
   const s = Math.max(iv.start, dayStart);
   const e = Math.min(iv.end, dayEnd);
   if (e <= s) return null;
-  return {
-    start: Math.round((s - dayStart) / MIN),
-    end: Math.round((e - dayStart) / MIN),
-  };
+  // Minutos de reloj, no transcurridos: en días con cambio de hora no coinciden.
+  const wall = (t: number) =>
+    t >= dayEnd ? 24 * 60 : minutesOfDay(new Date(t));
+  const start = wall(s);
+  return { start, end: Math.max(start, wall(e)) };
 }
 
-function overlapMinutes(
-  a: { start: number; end: number },
-  b: { start: number; end: number },
-) {
-  return Math.max(0, Math.min(a.end, b.end) - Math.max(a.start, b.start));
+/** Une intervalos solapados o contiguos; devuelve una lista ordenada. */
+function merge(spans: Span[]): Span[] {
+  const out: Span[] = [];
+  for (const x of [...spans].sort((a, b) => a.start - b.start)) {
+    const last = out.at(-1);
+    if (last && x.start <= last.end) last.end = Math.max(last.end, x.end);
+    else out.push({ start: x.start, end: x.end });
+  }
+  return out;
+}
+
+/** `base` menos `cut` (ambas ya unidas con `merge`). */
+function subtract(base: Span[], cut: Span[]): Span[] {
+  const out: Span[] = [];
+  for (const b of base) {
+    let s = b.start;
+    for (const c of cut) {
+      if (c.end <= s || c.start >= b.end) continue;
+      if (c.start > s) out.push({ start: s, end: c.start });
+      s = Math.max(s, c.end);
+    }
+    if (s < b.end) out.push({ start: s, end: b.end });
+  }
+  return out;
+}
+
+const totalMinutes = (spans: Span[]) =>
+  spans.reduce((n, x) => n + (x.end - x.start), 0);
+
+function overlapMinutes(a: Span[], b: Span[]) {
+  let n = 0;
+  for (const x of a)
+    for (const y of b)
+      n += Math.max(0, Math.min(x.end, y.end) - Math.max(x.start, y.start));
+  return n;
 }
 
 export async function getOccupancy(from: DateStr, days: number) {
@@ -255,8 +295,9 @@ export async function getOccupancy(from: DateStr, days: number) {
       const { start, end } = dayRange(date);
       const ds = start.getTime();
       const de = end.getTime();
+      const weekday = weekdayOf(date);
       const hours = allHours
-        .filter((h) => h.barberId === b.id && h.weekday === weekdayOf(date))
+        .filter((h) => h.barberId === b.id && h.weekday === weekday)
         .map((h) => ({ start: h.startMin, end: h.endMin }))
         .sort((x, y) => x.start - y.start);
 
@@ -280,16 +321,11 @@ export async function getOccupancy(from: DateStr, days: number) {
         .map((a) => toBlock(a, "busy"))
         .filter((x) => x !== null);
 
-      const totalWork = hours.reduce((n, h) => n + (h.end - h.start), 0);
-      const offMin = hours.reduce(
-        (n, h) => n + offs.reduce((k, o) => k + overlapMinutes(h, o), 0),
-        0,
-      );
-      const busyMin = hours.reduce(
-        (n, h) => n + appts.reduce((k, a) => k + overlapMinutes(h, a), 0),
-        0,
-      );
-      const workMin = Math.max(0, totalWork - offMin);
+      // Bloqueos solapados (p. ej. festivo + bloqueo propio) no se cuentan dos
+      // veces, y una cita dentro de un bloqueo no suma como ocupación.
+      const working = subtract(merge(hours), merge(offs));
+      const workMin = totalMinutes(working);
+      const busyMin = overlapMinutes(working, merge(appts));
       return {
         date,
         workMin,

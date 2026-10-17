@@ -55,6 +55,7 @@ const order = [1, 2, 3, 4, 5, 6, 0];
                   <input
                     class="input py-1"
                     type="time"
+                    aria-label={`${WEEKDAYS[d]}, primer turno, desde`}
                     name={`d${d}_1_start`}
                     value={s1 ? minutesToHHMM(s1.startMin) : ""}
                   />
@@ -62,6 +63,7 @@ const order = [1, 2, 3, 4, 5, 6, 0];
                   <input
                     class="input py-1"
                     type="time"
+                    aria-label={`${WEEKDAYS[d]}, primer turno, hasta`}
                     name={`d${d}_1_end`}
                     value={s1 ? minutesToHHMM(s1.endMin) : ""}
                   />
@@ -70,6 +72,7 @@ const order = [1, 2, 3, 4, 5, 6, 0];
                   <input
                     class="input py-1"
                     type="time"
+                    aria-label={`${WEEKDAYS[d]}, segundo turno, desde`}
                     name={`d${d}_2_start`}
                     value={s2 ? minutesToHHMM(s2.startMin) : ""}
                   />
@@ -77,6 +80,7 @@ const order = [1, 2, 3, 4, 5, 6, 0];
                   <input
                     class="input py-1"
                     type="time"
+                    aria-label={`${WEEKDAYS[d]}, segundo turno, hasta`}
                     name={`d${d}_2_end`}
                     value={s2 ? minutesToHHMM(s2.endMin) : ""}
                   />

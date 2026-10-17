@@ -1,11 +1,11 @@
 ---
 import Layout from "@/layouts/Layout.astro";
 import AuthCard from "@/components/AuthCard.astro";
+import { safeNext } from "@/lib/next";
 
-if (Astro.locals.user)
-  return Astro.redirect(Astro.url.searchParams.get("next") ?? "/");
+const next = safeNext(Astro.url.searchParams.get("next"));
 
-const next = Astro.url.searchParams.get("next") ?? "";
+if (Astro.locals.user) return Astro.redirect(next || "/");
 ---
 
 <Layout title="Crear cuenta">

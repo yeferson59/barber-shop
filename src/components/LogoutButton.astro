@@ -15,7 +15,11 @@ const { class: className } = Astro.props;
   document.querySelectorAll<HTMLButtonElement>("[data-logout]").forEach((btn) =>
     btn.addEventListener("click", async () => {
       btn.disabled = true;
-      await authClient.signOut();
+      const { error } = await authClient.signOut();
+      if (error) {
+        btn.disabled = false;
+        return;
+      }
       window.location.href = "/";
     }),
   );

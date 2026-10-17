@@ -1,5 +1,5 @@
 import { TZDate, tz } from "@date-fns/tz";
-import { addDays, format } from "date-fns";
+import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { env } from "./env";
 
@@ -10,8 +10,12 @@ export type DateStr = string;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** YYYY-MM-DD y además una fecha real (rechaza 2026-02-31, 2026-13-01…). */
 export function isDateStr(value: string): value is DateStr {
-  return DATE_RE.test(value);
+  if (!DATE_RE.test(value)) return false;
+  const { y, m, d } = parts(value);
+  const utc = new Date(Date.UTC(y, m - 1, d));
+  return utc.getUTCMonth() === m - 1 && utc.getUTCDate() === d;
 }
 
 function parts(date: DateStr) {
@@ -37,9 +41,10 @@ export function weekdayOf(date: DateStr): number {
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 }
 
+// Aritmética de calendario en UTC: no depende de la zona horaria del servidor.
 export function addDaysStr(date: DateStr, days: number): DateStr {
   const { y, m, d } = parts(date);
-  return format(addDays(new Date(y, m - 1, d), days), "yyyy-MM-dd");
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
 export function toDateStr(instant: Date): DateStr {

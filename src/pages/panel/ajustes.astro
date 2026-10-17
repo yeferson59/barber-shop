@@ -5,6 +5,8 @@ import ActionAlert from "@/components/ActionAlert.astro";
 import { getSettings } from "@/lib/settings";
 import { SHOP_TZ } from "@/lib/time";
 
+if (Astro.locals.user?.role !== "admin") return Astro.redirect("/panel");
+
 const s = await getSettings();
 ---
 

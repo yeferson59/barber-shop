@@ -77,7 +77,7 @@ const isActive = (href: string) =>
       href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400..800&family=Ultra&display=swap"
       rel="stylesheet"
     />
-    <title>{title} · Panel · {settings.name}</title>
+    <title>{title} | Panel | {settings.name}</title>
   </head>
   <body class="min-h-screen bg-azulejo">
     <div class="md:flex">
@@ -88,7 +88,7 @@ const isActive = (href: string) =>
             {settings.name}
           </span>
         </a>
-        <nav class="flex gap-1 overflow-x-auto px-3 pb-3 text-[15px] md:flex-1 md:flex-col md:overflow-visible">
+        <nav aria-label="Panel" class="flex gap-1 overflow-x-auto px-3 pb-3 text-[15px] md:flex-1 md:flex-col md:overflow-visible">
           {nav.map((n) => (
             <a
               href={n.href}
@@ -118,7 +118,7 @@ const isActive = (href: string) =>
             </a>
           ))}
         </nav>
-        <div class="hidden border-t border-white/10 px-5 py-4 text-sm md:block">
+        <div class="border-t border-white/10 px-5 py-4 text-sm">
           <p class="truncate font-semibold text-loza">{user.name}</p>
           <p class="text-azulejo/60">{isAdmin ? "Administrador" : "Barbero"}</p>
           <div class="mt-3 flex gap-4">
@@ -137,5 +137,21 @@ const isActive = (href: string) =>
         <slot />
       </main>
     </div>
+    <script>
+      // Asocia cada <label class="label"> con el campo que le sigue y confirma formularios con data-confirm.
+      let seq = 0;
+      document.querySelectorAll<HTMLLabelElement>("label.label:not([for])").forEach((l) => {
+        if (l.querySelector("input,select,textarea")) return;
+        const field = l.parentElement?.querySelector<HTMLElement>("input:not([type=hidden]),select,textarea");
+        if (!field) return;
+        field.id ||= `f-${seq++}`;
+        l.htmlFor = field.id;
+      });
+      document.querySelectorAll<HTMLFormElement>("form[data-confirm]").forEach((f) =>
+        f.addEventListener("submit", (e) => {
+          if (!confirm(f.dataset.confirm)) e.preventDefault();
+        }),
+      );
+    </script>
   </body>
 </html>

@@ -13,7 +13,7 @@ interface Props {
 
 const { title, description, bare = false } = Astro.props;
 const settings = await getSettings();
-const fullTitle = title ? `${title} · ${settings.name}` : settings.name;
+const fullTitle = title ? `${title} | ${settings.name}` : settings.name;
 ---
 
 <!doctype html>

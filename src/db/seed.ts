@@ -52,6 +52,16 @@ async function createUser(
 }
 
 async function main() {
+  // Borra todo: no ejecutarlo por accidente contra producción
+  const url = process.env.DATABASE_URL || "file:./data/barber.db";
+  if (
+    (process.env.NODE_ENV === "production" || !url.startsWith("file:")) &&
+    process.env.SEED_FORCE !== "1"
+  )
+    throw new Error(
+      `El seed borra todos los datos de ${url}. Usa SEED_FORCE=1 si de verdad quieres hacerlo.`,
+    );
+
   for (const table of [
     appointment,
     timeOff,

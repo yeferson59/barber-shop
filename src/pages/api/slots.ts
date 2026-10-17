@@ -6,7 +6,7 @@ export const GET: APIRoute = async ({ url }) => {
   const serviceId = url.searchParams.get("serviceId");
   const barberId = url.searchParams.get("barberId") || "any";
   const date = url.searchParams.get("date") ?? "";
-  const exclude = url.searchParams.get("exclude") ?? undefined;
+  const exclude = url.searchParams.get("exclude") || undefined;
   if (!serviceId || !isDateStr(date))
     return Response.json({ error: "Parámetros inválidos" }, { status: 400 });
 
